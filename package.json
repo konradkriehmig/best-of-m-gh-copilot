@@ -1,0 +1,168 @@
+{
+  "name": "best-of-n",
+  "displayName": "Best of N",
+  "description": "Run one prompt across N parallel Copilot CLI sessions in isolated git worktrees, then compare the results and keep the best.",
+  "version": "0.1.0",
+  "publisher": "konradkriehmig",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.95.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "AI",
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "copilot",
+    "agent",
+    "worktree",
+    "parallel",
+    "best-of-n"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bestOfN.run",
+        "title": "Run Prompt Across Models",
+        "category": "Best of N"
+      },
+      {
+        "command": "bestOfN.showDashboard",
+        "title": "Show Dashboard",
+        "category": "Best of N"
+      },
+      {
+        "command": "bestOfN.cancelRun",
+        "title": "Cancel Active Run",
+        "category": "Best of N"
+      },
+      {
+        "command": "bestOfN.cleanupOrphans",
+        "title": "Clean Up Orphaned Worktrees",
+        "category": "Best of N"
+      }
+    ],
+    "configuration": {
+      "title": "Best of N",
+      "properties": {
+        "bestOfN.cliPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `copilot` executable. Leave empty to auto-detect from `PATH` and the global npm prefix."
+        },
+        "bestOfN.models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Extra model ids to offer in the picker, merged with models discovered from the VS Code language model API. Example: `claude-opus-5`, `gpt-5.6-sol`."
+        },
+        "bestOfN.maxConcurrent": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 16,
+          "description": "Maximum number of agent sessions running at the same time. Extra variants are queued."
+        },
+        "bestOfN.worktreeRoot": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Directory to create worktrees in. Leave empty to use `<repo>/../.best-of-n`."
+        },
+        "bestOfN.verifyCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Shell command run inside each worktree after its agent finishes, for example `npm test`. Its exit code scores the variant. Leave empty to skip verification."
+        },
+        "bestOfN.verifyTimeoutMs": {
+          "type": "number",
+          "default": 600000,
+          "description": "Timeout in milliseconds for the verify command."
+        },
+        "bestOfN.judge.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "After all variants finish, make one extra Copilot call that reviews every diff and ranks them."
+        },
+        "bestOfN.judge.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model used for the judge call. Leave empty to use the CLI default model."
+        },
+        "bestOfN.judge.maxDiffBytes": {
+          "type": "number",
+          "default": 60000,
+          "description": "Maximum size of each variant diff handed to the judge. Larger diffs are truncated."
+        },
+        "bestOfN.denyTools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "shell(git push)"
+          ],
+          "markdownDescription": "Tool patterns passed to `--deny-tool`. Agents run with `--allow-all-tools`, so this deny list is the main safety control."
+        },
+        "bestOfN.disableBuiltinMcps": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Pass `--disable-builtin-mcps`. MCP servers start once per session, so N variants pay the cost N times."
+        },
+        "bestOfN.maxAiCredits": {
+          "type": "number",
+          "default": 0,
+          "markdownDescription": "Per-variant AI credit cap passed to `--max-ai-credits`. Set to 0 to leave it unset. The CLI rejects values below 30."
+        },
+        "bestOfN.copyIgnoredFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".env",
+            ".env.local"
+          ],
+          "description": "Git-ignored files copied from the main repository into each new worktree, so agents can build and test."
+        },
+        "bestOfN.keepLoserBranches": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep the branches of variants that were not chosen. Worktrees are always removed after a winner is merged."
+        },
+        "bestOfN.autoOpenDashboard": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the dashboard automatically when a run starts."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "smoke": "tsc && node scripts/smoke.mjs",
+    "vscode:prepublish": "npm run package"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^20.19.0",
+    "@types/vscode": "^1.95.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
