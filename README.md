@@ -30,6 +30,21 @@ models. `#bestofn` is exactly that.
 
 ## Using it
 
+### From the command palette
+
+This is the entry point that depends on nothing else, and the one to try first:
+
+`Ctrl+Shift+P` → **Best of N: Run Prompt Across Models**
+
+1. Enter the prompt every variant will attempt.
+2. Select the models. Selecting a single model is fine — you will be asked how many sessions to run
+   on it, which gives you best-of-N on one model.
+3. Choose how many sessions per model, and the base ref to branch from.
+4. Confirm. The cost warning shows how many agents are about to start.
+
+The dashboard then shows one card per variant with live status, streamed output, cost, diff size and
+verification result. When everything has finished, press **Keep this one** on the winner.
+
 ### From the chat window
 
 In **Agent mode**, reference the tool with `#`:
@@ -38,9 +53,9 @@ In **Agent mode**, reference the tool with `#`:
 #bestofn add retry with exponential backoff to the HTTP client
 ```
 
-Typing `#` lists your files *and* your tools — pick **Best of N**. You can also just ask for it
-("try this across three models") and the agent will reach for the tool itself. VS Code shows a
-confirmation with the cost multiple before anything starts.
+You can also just ask for it ("try this across three models") and the agent will reach for the tool
+itself. VS Code shows a confirmation with the cost multiple before anything starts. If the tool is
+not offered, check it is ticked in the tools picker above the chat input.
 
 In **Ask mode** the older participant syntax works too:
 
@@ -48,21 +63,13 @@ In **Ask mode** the older participant syntax works too:
 @bestofn add retry with exponential backoff to the HTTP client
 ```
 
+Which of these the chat input offers varies by VS Code version: `@`-mentions of participants have
+been progressively replaced by `#`-referenced tools. The extension contributes both, so whichever
+your version supports is available — and the command palette works regardless.
+
 Either way, the first run asks which models to fan out to and how many sessions each; the answer is
 saved to `bestOfN.chat.fanOut`, so later prompts run straight away. Change it with
 `@bestofn /models`, by naming models in the prompt ("run it on opus and sonnet"), or in settings.
-
-### From the command palette
-
-1. Run **Best of N: Run Prompt Across Models**.
-2. Enter the prompt every variant will attempt.
-3. Select the models. Selecting a single model is fine — you will be asked how many sessions to run
-   on it, which gives you best-of-N on one model.
-4. Choose how many sessions per model, and the base ref to branch from.
-5. Confirm. The cost warning shows how many agents are about to start.
-
-The dashboard then shows one card per variant with live status, streamed output, cost, diff size and
-verification result. When everything has finished, press **Keep this one** on the winner.
 
 ### What happens to your repository
 
@@ -168,6 +175,24 @@ npm run lint
 ```
 
 Press <kbd>F5</kbd> in VS Code to launch an Extension Development Host.
+
+The extension activates on `onStartupFinished` rather than lazily. Lazy activation is normally
+preferable, but a chat tool that is never listed is indistinguishable from a broken extension, so it
+registers eagerly. Activation is cheap: it wires up commands and providers and does no I/O.
+
+### Installing a local build
+
+```bash
+npm run package
+npx @vscode/vsce package --allow-missing-repository --skip-license
+code --uninstall-extension konradkriehmig.best-of-n
+code --install-extension best-of-n-<version>.vsix
+```
+
+Bump the version first. Reinstalling over the *same* version number leaves VS Code holding the old
+build, and a plain **Reload Window** is not always enough — quit VS Code completely. To confirm it
+loaded, look for `_doActivateExtension konradkriehmig.best-of-n` in
+`%APPDATA%\Code\logs\<session>\window*\exthost\exthost.log`.
 
 ### End-to-end smoke test
 
