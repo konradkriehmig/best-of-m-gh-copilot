@@ -1,7 +1,7 @@
 {
   "name": "best-of-n",
   "displayName": "Best of N",
-  "description": "Run one prompt across N parallel Copilot CLI sessions in isolated git worktrees, then compare the results and keep the best.",
+  "description": "Fire one prompt at several GitHub Copilot models at once, each in its own git worktree, then compare the results and keep the best.",
   "version": "0.1.0",
   "publisher": "konradkriehmig",
   "license": "MIT",
@@ -45,11 +45,59 @@
         "command": "bestOfN.cleanupOrphans",
         "title": "Clean Up Orphaned Worktrees",
         "category": "Best of N"
+      },
+      {
+        "command": "bestOfN.keepVariant",
+        "title": "Keep Variant",
+        "category": "Best of N",
+        "enablement": "false"
+      },
+      {
+        "command": "bestOfN.showVariantDiff",
+        "title": "Show Variant Diff",
+        "category": "Best of N",
+        "enablement": "false"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "bestOfN.chat",
+        "name": "bestofn",
+        "fullName": "Best of N",
+        "description": "Run this prompt across several models at once and compare the results",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "models",
+            "description": "Choose which models every prompt fans out to"
+          }
+        ]
       }
     ],
     "configuration": {
       "title": "Best of N",
       "properties": {
+        "bestOfN.engine": {
+          "type": "string",
+          "enum": [
+            "lm",
+            "cli"
+          ],
+          "enumDescriptions": [
+            "Run inside VS Code on GitHub Copilot models through the language model API. No external tools.",
+            "Run the GitHub Copilot CLI once per variant. Gives Copilot's own agent harness, but requires the CLI to be installed."
+          ],
+          "default": "lm",
+          "description": "How each variant is executed."
+        },
+        "bestOfN.chat.fanOut": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Models that an `@bestofn` chat prompt fans out to. Use `model x3` to run the same model several times. Set it interactively with `@bestofn /models`."
+        },
         "bestOfN.cliPath": {
           "type": "string",
           "default": "",

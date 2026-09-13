@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { branchName, extractJsonObject, formatDuration, slugify, truncate, variantLabel } from './text';
+import {
+  branchName,
+  extractJsonObject,
+  formatDuration,
+  parseFanOut,
+  slugify,
+  truncate,
+  variantLabel,
+} from './text';
 
 describe('slugify', () => {
   it('keeps safe model ids intact', () => {
@@ -56,6 +64,37 @@ describe('formatDuration', () => {
     expect(formatDuration(5000)).toBe('5s');
     expect(formatDuration(125000)).toBe('2m 5s');
     expect(formatDuration(-1)).toBe('-');
+  });
+});
+
+describe('parseFanOut', () => {
+  it('defaults to a single replica', () => {
+    expect(parseFanOut(['claude-opus-5'])).toEqual([{ model: 'claude-opus-5', count: 1 }]);
+  });
+
+  it('parses a trailing multiplier', () => {
+    expect(parseFanOut(['claude-opus-5 x3'])).toEqual([{ model: 'claude-opus-5', count: 3 }]);
+    expect(parseFanOut(['claude-opus-5*2'])).toEqual([{ model: 'claude-opus-5', count: 2 }]);
+  });
+
+  it('parses a leading multiplier', () => {
+    expect(parseFanOut(['3x gpt-5.6-sol'])).toEqual([{ model: 'gpt-5.6-sol', count: 3 }]);
+  });
+
+  it('merges duplicate models', () => {
+    expect(parseFanOut(['a', 'a x2'])).toEqual([{ model: 'a', count: 3 }]);
+  });
+
+  it('ignores blanks and invalid counts', () => {
+    expect(parseFanOut(['', '   ', 'a x0'])).toEqual([]);
+  });
+
+  it('caps a single entry at ten replicas', () => {
+    expect(parseFanOut(['a x999'])).toEqual([{ model: 'a', count: 10 }]);
+  });
+
+  it('keeps model ids containing dots and dashes intact', () => {
+    expect(parseFanOut(['gpt-5.6-sol x2'])).toEqual([{ model: 'gpt-5.6-sol', count: 2 }]);
   });
 });
 

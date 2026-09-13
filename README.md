@@ -16,16 +16,36 @@ Best of N does the opposite: **the same prompt, N times, in parallel**, then sco
 against each other. The worktree plumbing is the cheap part; the point of this extension is the
 comparison and the pick.
 
+There is also no way in the chat window to fire one prompt and have it run N times across different
+models. `@bestofn` is exactly that.
+
 ## Requirements
 
-- The [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli):
-  `npm install -g @github/copilot`, then `copilot` once to sign in.
+- GitHub Copilot in VS Code, signed in. That is all the default engine needs.
 - A workspace folder inside a git repository.
 - Git 2.5 or newer (for `git worktree`).
+- Only if you switch `bestOfN.engine` to `cli`: the
+  [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli)
+  (`npm install -g @github/copilot`, then `copilot` once to sign in).
 
 ## Using it
 
-1. Run **Best of N: Run Prompt Across Models** from the command palette.
+### From the chat window
+
+```
+@bestofn add retry with exponential backoff to the HTTP client
+```
+
+The first time, you are asked which models to fan out to and how many sessions each; the answer is
+saved to `bestOfN.chat.fanOut`, so later prompts run straight away. Change it any time with
+`@bestofn /models`.
+
+Chat streams progress, then prints a comparison table with a **Keep** and a **Diff** button per
+variant.
+
+### From the command palette
+
+1. Run **Best of N: Run Prompt Across Models**.
 2. Enter the prompt every variant will attempt.
 3. Select the models. Selecting a single model is fine — you will be asked how many sessions to run
    on it, which gives you best-of-N on one model.
@@ -62,18 +82,20 @@ ranking is a suggestion; you always choose the winner yourself.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `bestOfN.cliPath` | auto-detect | Path to the `copilot` executable |
+| `bestOfN.engine` | `lm` | `lm` runs inside VS Code on Copilot models; `cli` shells out to the Copilot CLI |
+| `bestOfN.chat.fanOut` | `[]` | Models an `@bestofn` prompt fans out to, e.g. `["claude-opus-5", "gpt-5.6-sol x2"]` |
+| `bestOfN.cliPath` | auto-detect | Path to the `copilot` executable (`cli` engine only) |
 | `bestOfN.models` | `[]` | Extra model ids for the picker |
 | `bestOfN.maxConcurrent` | `4` | Sessions running at once; the rest queue |
 | `bestOfN.worktreeRoot` | `<repo>/../.best-of-n` | Where worktrees are created |
 | `bestOfN.verifyCommand` | `""` | Command run in each worktree to score it, e.g. `npm test` |
 | `bestOfN.verifyTimeoutMs` | `600000` | Timeout for that command |
 | `bestOfN.judge.enabled` | `true` | Run one extra call that ranks all diffs |
-| `bestOfN.judge.model` | `""` | Model for the judge; empty uses the CLI default |
+| `bestOfN.judge.model` | `""` | Model for the judge; empty uses the default |
 | `bestOfN.judge.maxDiffBytes` | `60000` | Per-variant diff budget handed to the judge |
-| `bestOfN.denyTools` | `["shell(git push)"]` | Passed to `--deny-tool` |
-| `bestOfN.disableBuiltinMcps` | `true` | MCP servers start per session; N variants pay N times |
-| `bestOfN.maxAiCredits` | `0` | Per-variant credit cap; 0 leaves it unset |
+| `bestOfN.denyTools` | `["shell(git push)"]` | Passed to `--deny-tool` (`cli` engine only) |
+| `bestOfN.disableBuiltinMcps` | `true` | MCP servers start per session (`cli` engine only) |
+| `bestOfN.maxAiCredits` | `0` | Per-variant credit cap; 0 leaves it unset (`cli` engine only) |
 | `bestOfN.copyIgnoredFiles` | `[".env", ".env.local"]` | Ignored files copied into each worktree |
 | `bestOfN.keepLoserBranches` | `true` | Keep branches of variants you did not pick |
 
@@ -81,21 +103,40 @@ ranking is a suggestion; you always choose the winner yourself.
 
 Read this before your first run.
 
-- **Agents run unsupervised.** Non-interactive mode requires `--allow-all-tools`, so every variant
-  can edit files and run shell commands without asking. `bestOfN.denyTools` is the main control, and
-  it blocks `git push` by default.
+- **Agents run unsupervised.** On the `lm` engine each variant can read and write files anywhere
+  inside its own worktree without asking, but it has **no shell**: the tool set is
+  `list_files`, `read_file`, `write_file`, `replace_in_file` and `search_files`, and every path is
+  resolved against the worktree root and rejected if it escapes. The `cli` engine is more capable
+  and correspondingly less contained — it runs with `--allow-all-tools`, so `bestOfN.denyTools` is
+  the main control there, and it blocks `git push` by default.
 - **Worktrees are not a security boundary.** They share your filesystem, environment and
   credentials. Isolation here protects your *branch*, not your *machine*.
-- **N agents cost roughly N times as much** as a single session. The confirmation dialog says how
-  many are about to start, and `bestOfN.maxAiCredits` caps each one.
+- **N agents cost roughly N times as much** as a single session. The confirmation dialog and the
+  chat reply both say how many are about to start.
 
 ## Implementation notes
 
-- Variants are driven by the Copilot CLI rather than VS Code's chat UI. The internal
-  `workbench.action.chat.open` command can take a model selector, but it is undocumented, absent from
-  `vscode.d.ts` and limited to one chat view per window.
-- The prompt is written to the CLI's **stdin**, never interpolated into a command line, so quotes and
-  shell metacharacters in your prompt cannot be misinterpreted.
+### Two engines
+
+`lm` (default) runs each variant inside VS Code against a GitHub Copilot model through the stable
+`vscode.lm` language model API. Nothing is spawned and nothing leaves the editor.
+
+VS Code exposes no public API for starting an *agent-mode* session programmatically, so the agent
+loop, the tool set and the system prompt are this extension's own — what comes from Copilot is the
+model. That is the trade-off: full in-editor integration, a deliberately small tool set, and no
+shell. Variants get no cost figure either, because the language model API does not report one, so
+the cost column reads `-` and the cost tie-breaker in the ranking simply does not apply.
+
+`cli` shells out to the GitHub Copilot CLI once per variant, which gives Copilot's real agent
+harness with its full tool set, MCP servers and per-variant cost accounting. It needs the CLI
+installed and signed in.
+
+### Details
+
+- The internal `workbench.action.chat.open` command can take a model selector, but it is
+  undocumented, absent from `vscode.d.ts` and limited to one chat view per window, so it is not used.
+- On the `cli` engine the prompt is written to **stdin**, never interpolated into a command line, so
+  quotes and shell metacharacters in your prompt cannot be misinterpreted.
 - On Windows the npm `copilot.cmd` shim cannot be spawned directly by Node and spawning it through a
   shell would concatenate arguments unescaped, so the shim is resolved to the JavaScript entry point
   it wraps and run with the current Node binary.
@@ -119,7 +160,10 @@ Press <kbd>F5</kbd> in VS Code to launch an Extension Development Host.
 
 `npm run smoke` builds a throwaway git repository, runs real agents in real worktrees, and asserts
 the whole pipeline: CLI resolution, stdin prompt delivery, JSONL streaming, worktree isolation,
-change capture, the judge and cleanup.
+change capture, the judge and cleanup. It exercises the **`cli` engine**, because the language model
+API is only available inside the extension host and cannot be driven from a plain Node script. The
+`lm` engine's agent loop is covered instead by `src/run/lmAgent.test.ts`, which drives it against a
+scripted model.
 
 ```bash
 npm run smoke                        # 2 sessions on claude-haiku-4.5

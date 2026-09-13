@@ -11,8 +11,10 @@ import { branchName, shortRunId, variantLabel } from '../util/text';
 import { log } from '../util/log';
 import { RankedVariant, RunRecord, VariantState } from '../util/types';
 import { runAll } from './runner';
+import { runAllLm } from './lmRunner';
 import { runCheck } from '../score/checks';
 import { runJudge } from '../score/judge';
+import { runLmJudge } from '../score/lmJudge';
 import { rankVariants } from '../score/aggregate';
 
 export interface RunCallbacks {
@@ -31,7 +33,7 @@ export class RunController {
   private readonly diffs = new Map<string, string>();
 
   constructor(
-    private readonly invocation: CliInvocation,
+    private readonly invocation: CliInvocation | undefined,
     private readonly storageDir: string,
     private readonly callbacks: RunCallbacks,
   ) {}
@@ -132,17 +134,31 @@ export class RunController {
       }
       this.callbacks.onBusy(undefined);
 
-      await runAll(variants, {
-        invocation: this.invocation,
-        prompt: plan.prompt,
-        maxConcurrent: config().get<number>('maxConcurrent', 4),
-        denyTools: config().get<string[]>('denyTools', []),
-        disableBuiltinMcps: config().get<boolean>('disableBuiltinMcps', true),
-        maxAiCredits: config().get<number>('maxAiCredits', 0),
-        onUpdate: () => this.emit(),
-        onLog: (message) => log().info(message),
-        token,
-      });
+      const engine = config().get<string>('engine', 'lm');
+      if (engine === 'cli') {
+        if (!this.invocation) {
+          throw new Error('The CLI engine is selected but the Copilot CLI could not be found.');
+        }
+        await runAll(variants, {
+          invocation: this.invocation,
+          prompt: plan.prompt,
+          maxConcurrent: config().get<number>('maxConcurrent', 4),
+          denyTools: config().get<string[]>('denyTools', []),
+          disableBuiltinMcps: config().get<boolean>('disableBuiltinMcps', true),
+          maxAiCredits: config().get<number>('maxAiCredits', 0),
+          onUpdate: () => this.emit(),
+          onLog: (message) => log().info(message),
+          token,
+        });
+      } else {
+        await runAllLm(variants, {
+          prompt: plan.prompt,
+          maxConcurrent: config().get<number>('maxConcurrent', 4),
+          onUpdate: () => this.emit(),
+          onLog: (message) => log().info(message),
+          token,
+        });
+      }
 
       await this.postProcess(token);
       await this.judgeAndRank(token);
@@ -207,14 +223,28 @@ export class RunController {
 
     if (config().get<boolean>('judge.enabled', true) && !token.isCancellationRequested) {
       this.callbacks.onBusy('Judging the variants...');
-      this.run.judge = await runJudge(this.run.variants, {
-        invocation: this.invocation,
-        model: config().get<string>('judge.model', ''),
-        prompt: this.run.prompt,
-        maxDiffBytes: config().get<number>('judge.maxDiffBytes', 60_000),
-        diffs: this.diffs,
-        onLog: (message) => log().warn(message),
-      });
+      const engine = config().get<string>('engine', 'lm');
+      const judgeModel = config().get<string>('judge.model', '');
+      const maxDiffBytes = config().get<number>('judge.maxDiffBytes', 60_000);
+
+      this.run.judge =
+        engine === 'cli' && this.invocation
+          ? await runJudge(this.run.variants, {
+              invocation: this.invocation,
+              model: judgeModel,
+              prompt: this.run.prompt,
+              maxDiffBytes,
+              diffs: this.diffs,
+              onLog: (message) => log().warn(message),
+            })
+          : await runLmJudge(this.run.variants, {
+              model: judgeModel,
+              prompt: this.run.prompt,
+              maxDiffBytes,
+              diffs: this.diffs,
+              token,
+              onLog: (message) => log().warn(message),
+            });
       this.callbacks.onBusy(undefined);
     }
 

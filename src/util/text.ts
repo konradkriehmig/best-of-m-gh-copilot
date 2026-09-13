@@ -56,6 +56,44 @@ export function tail(value: string, maxChars: number): string {
 }
 
 /**
+ * Parse a fan-out specification into models and replica counts.
+ *
+ * Accepts `model`, `model x3`, `model*3` and `3x model`, so a chat user can write a
+ * fan-out set compactly in settings without a nested object schema.
+ */
+export function parseFanOut(entries: string[]): Array<{ model: string; count: number }> {
+  const merged = new Map<string, number>();
+
+  for (const raw of entries) {
+    const entry = raw.trim();
+    if (entry.length === 0) {
+      continue;
+    }
+
+    let model = entry;
+    let count = 1;
+
+    const trailing = /^(.*?)\s*[x*]\s*(\d+)$/i.exec(entry);
+    const leading = /^(\d+)\s*[x*]\s*(.+)$/i.exec(entry);
+
+    if (trailing) {
+      model = trailing[1].trim();
+      count = Number.parseInt(trailing[2], 10);
+    } else if (leading) {
+      count = Number.parseInt(leading[1], 10);
+      model = leading[2].trim();
+    }
+
+    if (model.length === 0 || !Number.isFinite(count) || count < 1) {
+      continue;
+    }
+    merged.set(model, (merged.get(model) ?? 0) + Math.min(count, 10));
+  }
+
+  return [...merged.entries()].map(([model, count]) => ({ model, count }));
+}
+
+/**
  * Extract a JSON object from model prose, which often wraps JSON in fences or
  * surrounds it with commentary.
  */

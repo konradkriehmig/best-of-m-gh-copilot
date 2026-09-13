@@ -4,7 +4,8 @@ import { CliNotFoundError, cliVersion, resolveCli, CliInvocation } from './cli/l
 import { repoRoot } from './git/exec';
 import { findOrphans, removeWorktree } from './git/worktrees';
 import { RunController } from './run/session';
-import { buildRunPlan } from './ui/picker';
+import { buildRunPlan, RunPlan } from './ui/picker';
+import { registerChatParticipant } from './ui/chatParticipant';
 import { Dashboard, DashboardMessage } from './ui/dashboard';
 import { DiffContentProvider, BASE_SCHEME, PATCH_SCHEME, openFileDiff, openVariantPatch } from './ui/diffView';
 import { cleanupRun, confirmWinner, mergeWinner } from './merge/winner';
@@ -185,22 +186,68 @@ async function runCommand(context: vscode.ExtensionContext): Promise<void> {
   if (!root) {
     return;
   }
-  const invocation = await ensureCli();
-  if (!invocation) {
-    return;
-  }
 
   const plan = await buildRunPlan(root);
   if (!plan) {
     return;
   }
 
-  const dashboard = Dashboard.show(context.extensionUri);
-  wireDashboard(context, dashboard);
+  const result = await startRun(context, plan, root);
+  if (!result) {
+    return;
+  }
+
+  const failures = result.run.variants.filter((v) => v.status === 'failed').length;
+  void vscode.window.showInformationMessage(
+    `Best of N finished: ${result.run.variants.length - failures}/${result.run.variants.length} variants succeeded.` +
+      (failures > 0 ? ' Check the dashboard for errors.' : ''),
+  );
+}
+
+/**
+ * The single run path shared by the palette command and the chat participant: build a
+ * controller, mirror its state to the dashboard, and report coarse progress.
+ */
+async function startRun(
+  context: vscode.ExtensionContext,
+  plan: RunPlan,
+  root: string,
+  onProgress?: (message: string) => void,
+  externalToken?: vscode.CancellationToken,
+): Promise<{ run: RunRecord; ranking: RankedVariant[] } | undefined> {
+  // The default engine runs Copilot models inside VS Code; the CLI is opt-in.
+  const engine = vscode.workspace.getConfiguration('bestOfN').get<string>('engine', 'lm');
+  let invocation: CliInvocation | undefined;
+  if (engine === 'cli') {
+    invocation = await ensureCli();
+    if (!invocation) {
+      return undefined;
+    }
+  }
+
+  const dashboard = vscode.workspace.getConfiguration('bestOfN').get<boolean>('autoOpenDashboard', true)
+    ? Dashboard.show(context.extensionUri)
+    : Dashboard.instance;
+  if (dashboard) {
+    wireDashboard(context, dashboard);
+  }
 
   let busy: string | undefined;
+  let lastReported = '';
   const publish = (run: RunRecord, ranking: RankedVariant[]) => {
-    dashboard.update({ run, ranking, busy });
+    dashboard?.update({ run, ranking, busy });
+
+    if (!onProgress) {
+      return;
+    }
+    // Chat shows a single progress line, so report only meaningful transitions.
+    const finished = run.variants.filter((v) => v.status === 'done' || v.status === 'failed').length;
+    const running = run.variants.filter((v) => v.status === 'running').length;
+    const message = busy ?? `${finished}/${run.variants.length} finished, ${running} running`;
+    if (message !== lastReported) {
+      lastReported = message;
+      onProgress(message);
+    }
   };
 
   controller = new RunController(invocation, path.join(context.globalStorageUri.fsPath, 'runs'), {
@@ -213,23 +260,22 @@ async function runCommand(context: vscode.ExtensionContext): Promise<void> {
     },
   });
 
+  const cancelSubscription = externalToken?.onCancellationRequested(() => controller?.cancel());
+
   try {
     const startPromise = controller.start(plan, root);
     pushState(context, controller.current);
     await startPromise;
     pushState(context, undefined);
 
-    const finished = controller.current;
-    if (finished) {
-      const failures = finished.variants.filter((v) => v.status === 'failed').length;
-      const summary =
-        `Best of N finished: ${finished.variants.length - failures}/${finished.variants.length} variants succeeded.` +
-        (failures > 0 ? ' Check the dashboard for errors.' : '');
-      void vscode.window.showInformationMessage(summary);
-    }
+    const run = controller.current;
+    return run ? { run, ranking: controller.currentRanking } : undefined;
   } catch (err) {
     void vscode.window.showErrorMessage(`Best of N failed: ${errorMessage(err)}`);
     log().error(errorMessage(err));
+    return undefined;
+  } finally {
+    cancelSubscription?.dispose();
   }
 }
 
@@ -300,6 +346,25 @@ export function activate(context: vscode.ExtensionContext): void {
       controller.cancel();
     }),
     vscode.commands.registerCommand('bestOfN.cleanupOrphans', () => cleanupOrphansCommand(context)),
+    vscode.commands.registerCommand('bestOfN.keepVariant', (variantId: string) =>
+      handleWinner(context, variantId),
+    ),
+    vscode.commands.registerCommand('bestOfN.showVariantDiff', async (variantId: string) => {
+      const run = controller?.current;
+      const variant = controller?.variant(variantId);
+      if (run && variant && diffProvider) {
+        await openVariantPatch(diffProvider, run.repoRoot, run.baseRef, variant);
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    registerChatParticipant(context, {
+      resolveRepoRoot,
+      isRunning: () => controller?.isRunning ?? false,
+      execute: (plan, repoRoot, onProgress, token) =>
+        startRun(context, plan, repoRoot, onProgress, token),
+    }),
   );
 }
 
