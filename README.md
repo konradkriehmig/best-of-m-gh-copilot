@@ -17,7 +17,7 @@ against each other. The worktree plumbing is the cheap part; the point of this e
 comparison and the pick.
 
 There is also no way in the chat window to fire one prompt and have it run N times across different
-models. `@bestofn` is exactly that.
+models. `#bestofn` is exactly that.
 
 ## Requirements
 
@@ -32,16 +32,25 @@ models. `@bestofn` is exactly that.
 
 ### From the chat window
 
+In **Agent mode**, reference the tool with `#`:
+
+```
+#bestofn add retry with exponential backoff to the HTTP client
+```
+
+Typing `#` lists your files *and* your tools — pick **Best of N**. You can also just ask for it
+("try this across three models") and the agent will reach for the tool itself. VS Code shows a
+confirmation with the cost multiple before anything starts.
+
+In **Ask mode** the older participant syntax works too:
+
 ```
 @bestofn add retry with exponential backoff to the HTTP client
 ```
 
-The first time, you are asked which models to fan out to and how many sessions each; the answer is
-saved to `bestOfN.chat.fanOut`, so later prompts run straight away. Change it any time with
-`@bestofn /models`.
-
-Chat streams progress, then prints a comparison table with a **Keep** and a **Diff** button per
-variant.
+Either way, the first run asks which models to fan out to and how many sessions each; the answer is
+saved to `bestOfN.chat.fanOut`, so later prompts run straight away. Change it with
+`@bestofn /models`, by naming models in the prompt ("run it on opus and sonnet"), or in settings.
 
 ### From the command palette
 
@@ -83,7 +92,7 @@ ranking is a suggestion; you always choose the winner yourself.
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `bestOfN.engine` | `lm` | `lm` runs inside VS Code on Copilot models; `cli` shells out to the Copilot CLI |
-| `bestOfN.chat.fanOut` | `[]` | Models an `@bestofn` prompt fans out to, e.g. `["claude-opus-5", "gpt-5.6-sol x2"]` |
+| `bestOfN.chat.fanOut` | `[]` | Models a `#bestofn` / `@bestofn` prompt fans out to, e.g. `["claude-opus-5", "gpt-5.6-sol x2"]` |
 | `bestOfN.cliPath` | auto-detect | Path to the `copilot` executable (`cli` engine only) |
 | `bestOfN.models` | `[]` | Extra model ids for the picker |
 | `bestOfN.maxConcurrent` | `4` | Sessions running at once; the rest queue |
@@ -135,6 +144,10 @@ installed and signed in.
 
 - The internal `workbench.action.chat.open` command can take a model selector, but it is
   undocumented, absent from `vscode.d.ts` and limited to one chat view per window, so it is not used.
+- The extension contributes **both** a language model tool (`#bestofn`) and a chat participant
+  (`@bestofn`). Agent mode routes extension capabilities through tools, and `@`-mentions of
+  participants are not offered there, so the tool is the primary entry point and the participant is
+  the ask-mode fallback. Both run the same code path.
 - On the `cli` engine the prompt is written to **stdin**, never interpolated into a command line, so
   quotes and shell metacharacters in your prompt cannot be misinterpreted.
 - On Windows the npm `copilot.cmd` shim cannot be spawned directly by Node and spawning it through a

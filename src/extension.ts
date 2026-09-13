@@ -5,7 +5,8 @@ import { repoRoot } from './git/exec';
 import { findOrphans, removeWorktree } from './git/worktrees';
 import { RunController } from './run/session';
 import { buildRunPlan, RunPlan } from './ui/picker';
-import { registerChatParticipant } from './ui/chatParticipant';
+import { registerChatParticipant, ChatRunHost } from './ui/chatParticipant';
+import { registerChatTool } from './ui/chatTool';
 import { Dashboard, DashboardMessage } from './ui/dashboard';
 import { DiffContentProvider, BASE_SCHEME, PATCH_SCHEME, openFileDiff, openVariantPatch } from './ui/diffView';
 import { cleanupRun, confirmWinner, mergeWinner } from './merge/winner';
@@ -358,14 +359,22 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  context.subscriptions.push(
-    registerChatParticipant(context, {
-      resolveRepoRoot,
-      isRunning: () => controller?.isRunning ?? false,
-      execute: (plan, repoRoot, onProgress, token) =>
-        startRun(context, plan, repoRoot, onProgress, token),
-    }),
-  );
+  const chatHost: ChatRunHost = {
+    resolveRepoRoot,
+    isRunning: () => controller?.isRunning ?? false,
+    execute: (plan, repoRoot, onProgress, token) =>
+      startRun(context, plan, repoRoot, onProgress, token),
+  };
+
+  // Two chat entry points: the `#bestofn` tool for agent mode, which is where VS Code
+  // now routes extension capabilities, and the `@bestofn` participant for ask mode.
+  context.subscriptions.push(registerChatTool(chatHost));
+
+  try {
+    context.subscriptions.push(registerChatParticipant(context, chatHost));
+  } catch (err) {
+    log().warn(`Chat participant unavailable, use #bestofn instead: ${errorMessage(err)}`);
+  }
 }
 
 export function deactivate(): void {

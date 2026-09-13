@@ -74,6 +74,36 @@
         ]
       }
     ],
+    "languageModelTools": [
+      {
+        "name": "run_best_of_n",
+        "displayName": "Best of N",
+        "toolReferenceName": "bestofn",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(run-all)",
+        "userDescription": "Run this task across several models in parallel, each in its own git worktree, then compare the results.",
+        "modelDescription": "Runs one coding task N times in parallel, once per selected GitHub Copilot model, each in its own isolated git worktree, then verifies, ranks and compares the results. Use this when the user asks to try a task across several models, to run something in parallel, to fan out, to get a best-of-N result, or to compare how different models solve the same problem. Do NOT use it for ordinary single-attempt edits. This tool performs the whole task itself and takes minutes to return; after it returns, report its result table to the user and do not redo the work yourself. It never modifies the user's working tree: each attempt lands on its own branch.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "The complete task each parallel attempt should carry out independently, written as a self-contained instruction. Include any detail the user gave, because each attempt sees only this text."
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional. Model ids to run, for example [\"claude-opus-5\", \"gpt-5.6-sol\"]. Append \" x3\" to an id to run that model three times. Omit this unless the user named specific models or a number of attempts; the user's configured default is then used."
+            }
+          },
+          "required": [
+            "prompt"
+          ]
+        }
+      }
+    ],
     "configuration": {
       "title": "Best of N",
       "properties": {

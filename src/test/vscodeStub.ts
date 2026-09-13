@@ -22,6 +22,14 @@ export class LanguageModelToolResultPart {
   ) {}
 }
 
+export class LanguageModelToolResult {
+  constructor(public readonly content: unknown[]) {}
+}
+
+export class MarkdownString {
+  constructor(public readonly value: string = '') {}
+}
+
 export class LanguageModelError extends Error {
   constructor(
     message: string,
@@ -40,6 +48,7 @@ export const LanguageModelChatToolMode = { Auto: 1, Required: 2 } as const;
 
 export const lm = {
   selectChatModels: async () => [] as unknown[],
+  registerTool: () => ({ dispose: () => undefined }),
 };
 
 export const workspace = {
@@ -49,6 +58,8 @@ export const workspace = {
   }),
 };
 
+export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 } as const;
+
 export const window = {
   createOutputChannel: () => ({
     info: () => undefined,
@@ -57,4 +68,7 @@ export const window = {
     appendLine: () => undefined,
     dispose: () => undefined,
   }),
+  // Tests that reach a picker are asserting the "user cancelled" path.
+  showQuickPick: async () => undefined,
+  showInputBox: async () => undefined,
 };
