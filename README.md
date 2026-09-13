@@ -30,9 +30,16 @@ models. `#bestofn` is exactly that.
 
 ## Using it
 
+### The status bar button (easiest)
+
+Click **$(run-all) Best of N** in the status bar, bottom right. This is always visible once the
+extension is active and does not depend on chat syntax, which moves between VS Code versions.
+
+The same thing is bound to **`Ctrl+Alt+N`** (`Cmd+Alt+N` on macOS).
+
 ### From the command palette
 
-This is the entry point that depends on nothing else, and the one to try first:
+The equivalent, if you prefer typing:
 
 `Ctrl+Shift+P` → **Best of N: Run Prompt Across Models**
 
@@ -184,13 +191,17 @@ registers eagerly. Activation is cheap: it wires up commands and providers and d
 
 ```bash
 npm run package
-npx @vscode/vsce package --allow-missing-repository --skip-license
+npx @vscode/vsce package --allow-missing-repository
 code --uninstall-extension konradkriehmig.best-of-n
 code --install-extension best-of-n-<version>.vsix
 ```
 
 Bump the version first. Reinstalling over the *same* version number leaves VS Code holding the old
-build, and a plain **Reload Window** is not always enough — quit VS Code completely. To confirm it
+build, and a plain **Reload Window** is not always enough — quit VS Code completely, because windows
+that were already open keep running the extension host they started with.
+
+`--uninstall-extension` also leaves the old version's folder behind in `~/.vscode/extensions`, so
+delete it and check that `extensions.json` lists only the version you want. To confirm the new build
 loaded, look for `_doActivateExtension konradkriehmig.best-of-n` in
 `%APPDATA%\Code\logs\<session>\window*\exthost\exthost.log`.
 

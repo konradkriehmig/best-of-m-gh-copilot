@@ -375,6 +375,15 @@ export function activate(context: vscode.ExtensionContext): void {
   } catch (err) {
     log().warn(`Chat participant unavailable, use #bestofn instead: ${errorMessage(err)}`);
   }
+
+  // Chat surfaces move between VS Code versions, so keep one entry point that is always
+  // visible and cannot be hidden behind a picker.
+  const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  status.command = 'bestOfN.run';
+  status.text = '$(run-all) Best of N';
+  status.tooltip = 'Run one prompt across several Copilot models in parallel';
+  status.show();
+  context.subscriptions.push(status);
 }
 
 export function deactivate(): void {

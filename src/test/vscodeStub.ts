@@ -71,4 +71,14 @@ export const window = {
   // Tests that reach a picker are asserting the "user cancelled" path.
   showQuickPick: async () => undefined,
   showInputBox: async () => undefined,
+  createStatusBarItem: () => ({
+    command: undefined as string | undefined,
+    text: '',
+    tooltip: '',
+    show: () => undefined,
+    hide: () => undefined,
+    dispose: () => undefined,
+  }),
 };
+
+export const StatusBarAlignment = { Left: 1, Right: 2 } as const;
