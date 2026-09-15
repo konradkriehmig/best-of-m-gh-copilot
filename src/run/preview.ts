@@ -68,6 +68,79 @@ const LANGUAGES: Record<string, string> = {
 /** Keeps a big generated file from bloating every dashboard message. */
 const MAX_CODE_CHARS = 40_000;
 
+/** A rendered page carries its assets inline, so it needs more room than a source view. */
+const MAX_HTML_CHARS = 400_000;
+
+/** Only same-directory-ish relative paths are inlined; remote URLs are left alone. */
+function isLocalHref(href: string): boolean {
+  return (
+    href.length > 0 &&
+    !/^[a-z][a-z0-9+.-]*:/i.test(href) &&
+    !href.startsWith('//') &&
+    !href.startsWith('#') &&
+    !href.startsWith('data:')
+  );
+}
+
+async function readSibling(dir: string, root: string, href: string): Promise<string | undefined> {
+  const clean = href.split('?')[0].split('#')[0];
+  const target = path.resolve(dir, clean);
+  // An inlined asset must not be a way to read files outside the worktree.
+  const relative = path.relative(root, target);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    return undefined;
+  }
+  try {
+    return await fs.readFile(target, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Inline local stylesheets and scripts into the page.
+ *
+ * The preview is rendered in a sandboxed `srcdoc` frame, which has an opaque origin and
+ * therefore cannot load subresources from the worktree at all — measured, not assumed.
+ * Anything not inlined here simply will not appear, which is why a generated page that
+ * links a shared `common.css` rendered as a blank box. Remote URLs are deliberately left
+ * as-is: they are blocked by the frame's policy rather than silently fetched.
+ */
+export async function inlineAssets(html: string, dir: string, root: string): Promise<string> {
+  const links = [...html.matchAll(/<link\b[^>]*>/gi)];
+  let result = html;
+
+  for (const match of links) {
+    const tag = match[0];
+    if (!/rel\s*=\s*["']?stylesheet/i.test(tag)) {
+      continue;
+    }
+    const href = /href\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1];
+    if (!href || !isLocalHref(href)) {
+      continue;
+    }
+    const css = await readSibling(dir, root, href);
+    if (css !== undefined) {
+      result = result.replace(tag, `<style>\n${css}\n</style>`);
+    }
+  }
+
+  const scripts = [...result.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>\s*<\/script>/gi)];
+  for (const match of scripts) {
+    const href = match[1];
+    if (!isLocalHref(href)) {
+      continue;
+    }
+    const js = await readSibling(dir, root, href);
+    if (js !== undefined) {
+      // Any literal </script> inside the file would end the tag early.
+      result = result.replace(match[0], `<script>\n${js.replace(/<\/script>/gi, '<\\/script>')}\n</script>`);
+    }
+  }
+
+  return result;
+}
+
 /**
  * An entry point is more useful than a fragment, so prefer an obvious index, then the
  * shallowest path, then the shortest name. Ties are broken alphabetically so the choice
@@ -116,9 +189,8 @@ export function choosePreviewFile(files: string[]): string | undefined {
 }
 
 /**
- * Build the preview payload for a variant. HTML is referenced by path and framed live
- * from the worktree, so relative assets such as a shared stylesheet still resolve;
- * anything else is read into the message as text.
+ * Build the preview payload for a variant. HTML is inlined into a self-contained document
+ * so it can be rendered in a sandboxed frame; anything else is read in as text.
  */
 export async function buildPreview(
   worktreePath: string,
@@ -143,12 +215,20 @@ export async function buildPreview(
 
   const truncated = source.length > MAX_CODE_CHARS;
   const code = truncated ? source.slice(0, MAX_CODE_CHARS) : source;
+  const isHtml = HTML_EXTENSIONS.has(extension);
+
+  let html: string | undefined;
+  if (isHtml) {
+    const inlined = await inlineAssets(source, path.dirname(absolute), worktreePath);
+    html = inlined.length > MAX_HTML_CHARS ? undefined : inlined;
+  }
 
   return {
     file,
-    kind: HTML_EXTENSIONS.has(extension) ? 'html' : 'code',
+    kind: isHtml ? 'html' : 'code',
     path: absolute,
     code,
+    html,
     truncated,
     language,
   };

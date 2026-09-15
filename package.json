@@ -2,7 +2,7 @@
   "name": "best-of-n",
   "displayName": "Best of N",
   "description": "Fire one prompt at several GitHub Copilot models at once, each in its own git worktree, then compare the results and keep the best.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "konradkriehmig",
   "license": "MIT",
   "private": true,

@@ -130,7 +130,7 @@
     // Enforced here as well as in the extension: source mode must never execute
     // generated HTML, whatever the payload happens to contain.
     const isHtml =
-      preview.kind === 'html' && Boolean(preview.uri) && settings.mode === 'rendered';
+      preview.kind === 'html' && Boolean(preview.html) && settings.mode === 'rendered';
     // Rendered output is the point of the comparison, so it is the default when we have it.
     const key = variant.id;
     if (showSource[key] === undefined) {
@@ -161,13 +161,13 @@
       const frame = document.createElement('iframe');
       frame.className = 'preview-frame';
       frame.style.height = settings.height + 'px';
-      // allow-same-origin is required, not optional: VS Code serves webview resources
-      // through a service worker, and a sandboxed frame with an opaque origin cannot be
-      // served by it, which renders as a blank box. The frame still lands on the resource
-      // origin rather than the dashboard's, so it cannot reach this document, and top
-      // navigation, popups, forms and modals all stay blocked by omission.
-      frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-pointer-lock');
-      frame.src = preview.uri;
+      // allow-scripts only, deliberately without allow-same-origin: the frame gets an
+      // opaque origin, so the generated page cannot reach this document, the extension
+      // host, or anything on disk. Pointing an iframe at the file's own webview URI does
+      // not work -- the resource is served, but a nested frame's scripts never run -- so
+      // the page arrives inlined and is rendered from srcdoc instead.
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.srcdoc = preview.html;
       wrapper.appendChild(frame);
     } else if (preview.code) {
       const code = el('pre', 'preview-code', preview.code);

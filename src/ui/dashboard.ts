@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { RankedVariant, RunRecord, VariantState } from '../util/types';
 
@@ -19,15 +18,6 @@ export interface DashboardState {
   preview?: { mode: 'rendered' | 'source' | 'off'; height: number };
 }
 
-function nonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let text = '';
-  for (let i = 0; i < 32; i++) {
-    text += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return text;
-}
-
 export class Dashboard {
   private static current: Dashboard | undefined;
   private readonly panel: vscode.WebviewPanel;
@@ -35,7 +25,6 @@ export class Dashboard {
   private readonly handlers = new Set<(message: DashboardMessage) => void>();
   private state: DashboardState = { ranking: [] };
   private ready = false;
-  private grantedRoot: string | undefined;
 
   private constructor(private readonly extensionUri: vscode.Uri) {
     this.panel = vscode.window.createWebviewPanel(
@@ -91,10 +80,12 @@ export class Dashboard {
   }
 
   /**
-   * Framing a variant's HTML straight out of its worktree keeps relative assets working,
-   * but the webview will only load paths it has been granted. Worktree locations are not
-   * known until a run starts, so widen the roots here and swap absolute paths for webview
-   * URIs, which is the only form the dashboard can use.
+   * Attach the preview settings, and strip the rendered HTML when it is not wanted.
+   *
+   * Previews used to be framed straight out of the worktree by webview URI. That never
+   * worked: the resource is served (HTTP 200), but a nested frame's own scripts never run,
+   * so every page rendered as a blank box. The page is now inlined by `buildPreview` and
+   * rendered from `srcdoc` instead, which needs no resource grant at all.
    */
   private withPreviewUris(state: DashboardState): DashboardState {
     const settings = vscode.workspace.getConfiguration('bestOfN');
@@ -107,40 +98,18 @@ export class Dashboard {
       return withSettings;
     }
 
-    if (run.worktreeRoot && run.runId) {
-      // Grant only this run's directory, not every run ever made, so a generated page
-      // cannot read the results of unrelated runs through the resource origin.
-      const runRoot = path.join(run.worktreeRoot, run.runId);
-      if (runRoot !== this.grantedRoot) {
-        this.grantedRoot = runRoot;
-        this.panel.webview.options = {
-          enableScripts: true,
-          localResourceRoots: [
-            vscode.Uri.joinPath(this.extensionUri, 'media'),
-            vscode.Uri.file(runRoot),
-          ],
-        };
-      }
-    }
-
-    const withUri = (variant: VariantState): VariantState => {
-      // Only a rendered preview needs a URI; source mode must never be framable.
-      if (!variant.preview || variant.preview.kind !== 'html' || mode !== 'rendered') {
+    const strip = (variant: VariantState): VariantState => {
+      // Source mode must never be able to execute the generated page.
+      if (!variant.preview || mode === 'rendered') {
         return variant;
       }
-      return {
-        ...variant,
-        preview: {
-          ...variant.preview,
-          uri: this.panel.webview.asWebviewUri(vscode.Uri.file(variant.preview.path)).toString(),
-        },
-      };
+      return { ...variant, preview: { ...variant.preview, html: undefined } };
     };
 
     return {
       ...withSettings,
-      run: { ...run, variants: run.variants.map(withUri) },
-      ranking: state.ranking.map((entry) => ({ ...entry, variant: withUri(entry.variant) })),
+      run: { ...run, variants: run.variants.map(strip) },
+      ranking: state.ranking.map((entry) => ({ ...entry, variant: strip(entry.variant) })),
     };
   }
 
@@ -161,20 +130,36 @@ export class Dashboard {
     const styleUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'media', 'dashboard.css'),
     );
-    const n = nonce();
+
+    // A `srcdoc` frame inherits this policy, so it is what decides whether a generated
+    // page can run its own inline scripts. A nonce cannot help the child -- it has no way
+    // to know one -- and the presence of any nonce makes the browser ignore
+    // 'unsafe-inline' everywhere, which is exactly what rendered every preview blank.
+    // Measured, not assumed: with a nonce the child is blocked; without one it runs.
+    //
+    // This does not weaken the dashboard itself. Its markup is static, every piece of
+    // model- or agent-produced text goes through textContent rather than innerHTML, and
+    // `default-src 'none'` still blocks the frame from reaching the network or the disk.
+    const csp = [
+      "default-src 'none'",
+      `style-src ${webview.cspSource} 'unsafe-inline'`,
+      `script-src ${webview.cspSource} 'unsafe-inline'`,
+      `img-src ${webview.cspSource} data:`,
+      `font-src ${webview.cspSource}`,
+    ].join('; ');
 
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${n}'; frame-src ${webview.cspSource};">
+<meta http-equiv="Content-Security-Policy" content="${csp};">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="${styleUri}" rel="stylesheet">
 <title>Best of N</title>
 </head>
 <body>
 <div id="root"><p class="empty">No run yet. Use <strong>Best of N: Run Prompt Across Models</strong>.</p></div>
-<script nonce="${n}" src="${scriptUri}"></script>
+<script src="${scriptUri}"></script>
 </body>
 </html>`;
   }

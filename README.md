@@ -69,14 +69,13 @@ The file is picked from the variant's changed files: an HTML entry point wins, p
 then the shallowest path; otherwise the most interesting source file. **Open file** opens the real
 file in an editor.
 
-Rendered previews execute model-written JavaScript. The frame gets `allow-scripts` and
-`allow-same-origin`, but not top navigation, popups, forms or modals. `allow-same-origin` is
-required rather than optional: VS Code serves webview resources through a service worker, and a
-frame with an opaque origin cannot be served by it, so the preview would render blank. The frame
-lands on the resource origin rather than the dashboard's, so it still cannot reach the dashboard,
-the extension host or your editor, and only the current run's directory is exposed to it. If you
-would rather never execute it, set `bestOfN.preview.mode` to `source`, or `off` to hide previews
-entirely.
+Rendered previews execute model-written JavaScript. The page is inlined into a self-contained
+document and rendered from `srcdoc` in a frame sandboxed with `allow-scripts` **only** — no
+`allow-same-origin` — so it has an opaque origin and cannot reach the dashboard, the extension host,
+your editor, the network or anything on disk. Local stylesheets and scripts the page references are
+inlined for it, because a frame with an opaque origin cannot fetch them; remote URLs are left alone
+and are blocked. If you would rather never execute it, set `bestOfN.preview.mode` to `source`, or
+`off` to hide previews entirely.
 
 ### From the chat window
 
@@ -169,8 +168,8 @@ Read this before your first run.
   credentials. Isolation here protects your *branch*, not your *machine*.
 - **N agents cost roughly N times as much** as a single session. The confirmation dialog and the
   chat reply both say how many are about to start.
-- **Rendered previews execute model-written JavaScript.** The frame runs on the webview resource
-  origin, not the dashboard's, and only the current run's directory is exposed to it. Set
+- **Rendered previews execute model-written JavaScript.** The frame has an opaque origin and no
+  network or disk access, so it cannot reach the dashboard, the extension host or your files. Set
   `bestOfN.preview.mode` to `source` or `off` to opt out.
 
 ## Implementation notes

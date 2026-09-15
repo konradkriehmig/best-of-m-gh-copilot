@@ -60,14 +60,14 @@ export interface VariantPreview {
   /** Path relative to the worktree root. */
   file: string;
   kind: 'html' | 'code';
-  /** Absolute path, converted to a webview URI before it reaches the dashboard. */
+  /** Absolute path, used by "Open file". */
   path: string;
   /** Populated for both kinds, so HTML can offer a source view too. */
   code?: string;
+  /** Self-contained HTML with local assets inlined, rendered in a sandboxed frame. */
+  html?: string;
   truncated?: boolean;
   language?: string;
-  /** Set by the dashboard, never by the runner. */
-  uri?: string;
 }
 
 export interface VariantState {
