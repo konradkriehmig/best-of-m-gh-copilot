@@ -90,6 +90,31 @@
     return wrapper;
   }
 
+  function stepsFor(variant) {
+    const calls = variant.toolCalls || [];
+    if (calls.length === 0) {
+      return null;
+    }
+
+    const wrapper = el('div', 'steps');
+    const list = el('ol', 'step-list');
+    // The newest steps matter most while a variant is working, so show the tail.
+    const shown = calls.length > 12 ? calls.slice(calls.length - 12) : calls;
+    if (calls.length > shown.length) {
+      wrapper.appendChild(el('div', 'step-more', '... ' + (calls.length - shown.length) + ' earlier steps'));
+    }
+    shown.forEach(function (call) {
+      const item = el('li', 'step step-' + call.status);
+      item.appendChild(el('span', 'step-name', call.name));
+      if (call.detail) {
+        item.appendChild(el('span', 'step-detail', call.detail));
+      }
+      list.appendChild(item);
+    });
+    wrapper.appendChild(list);
+    return wrapper;
+  }
+
   function previewFor(variant, state) {
     const preview = variant.preview;
     const settings = state.preview || { mode: 'rendered', height: 320 };
@@ -136,10 +161,12 @@
       const frame = document.createElement('iframe');
       frame.className = 'preview-frame';
       frame.style.height = settings.height + 'px';
-      // No allow-same-origin: generated pages stay in an opaque origin and cannot reach
-      // the dashboard, the extension host, or each other.
-      frame.setAttribute('sandbox', 'allow-scripts allow-pointer-lock');
-      frame.setAttribute('loading', 'lazy');
+      // allow-same-origin is required, not optional: VS Code serves webview resources
+      // through a service worker, and a sandboxed frame with an opaque origin cannot be
+      // served by it, which renders as a blank box. The frame still lands on the resource
+      // origin rather than the dashboard's, so it cannot reach this document, and top
+      // navigation, popups, forms and modals all stay blocked by omission.
+      frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-pointer-lock');
       frame.src = preview.uri;
       wrapper.appendChild(frame);
     } else if (preview.code) {
@@ -185,6 +212,13 @@
         ? variant.assistantText.slice(variant.assistantText.length - 4000)
         : variant.assistantText;
       node.appendChild(el('pre', 'stream', text));
+    }
+
+    // Every model calls tools, but only some narrate, so the step list is what makes
+    // progress visible across all of them.
+    const steps = stepsFor(variant);
+    if (steps) {
+      node.appendChild(steps);
     }
 
     if (ranked && ranked.reasons && ranked.reasons.length > 0) {

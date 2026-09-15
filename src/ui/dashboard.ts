@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { RankedVariant, RunRecord, VariantState } from '../util/types';
 
@@ -108,15 +109,20 @@ export class Dashboard {
       return withSettings;
     }
 
-    if (run.worktreeRoot && run.worktreeRoot !== this.grantedRoot) {
-      this.grantedRoot = run.worktreeRoot;
-      this.panel.webview.options = {
-        enableScripts: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(this.extensionUri, 'media'),
-          vscode.Uri.file(run.worktreeRoot),
-        ],
-      };
+    if (run.worktreeRoot && run.runId) {
+      // Grant only this run's directory, not every run ever made, so a generated page
+      // cannot read the results of unrelated runs through the resource origin.
+      const runRoot = path.join(run.worktreeRoot, run.runId);
+      if (runRoot !== this.grantedRoot) {
+        this.grantedRoot = runRoot;
+        this.panel.webview.options = {
+          enableScripts: true,
+          localResourceRoots: [
+            vscode.Uri.joinPath(this.extensionUri, 'media'),
+            vscode.Uri.file(runRoot),
+          ],
+        };
+      }
     }
 
     const withUri = (variant: VariantState): VariantState => {

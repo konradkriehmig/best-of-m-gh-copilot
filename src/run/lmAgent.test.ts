@@ -169,7 +169,9 @@ describe('runLmAgent', () => {
     });
 
     expect(await fs.readFile(path.join(root, 'hello.txt'), 'utf8')).toBe('hi\n');
-    expect(variant.toolCalls).toEqual([{ id: 'c1', name: 'write_file', status: 'done' }]);
+    expect(variant.toolCalls).toEqual([
+      { id: 'c1', name: 'write_file', status: 'done', detail: 'hello.txt' },
+    ]);
     expect(variant.assistantText).toBe('Created hello.txt.');
 
     // Second request must carry the assistant turn and the tool result.

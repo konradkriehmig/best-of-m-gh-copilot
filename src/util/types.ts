@@ -10,6 +10,8 @@ export interface ToolCallState {
   id: string;
   name: string;
   status: 'running' | 'done' | 'error';
+  /** Short summary of what the call targeted, e.g. the file path. */
+  detail?: string;
 }
 
 export interface UsageReport {

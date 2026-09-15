@@ -59,6 +59,20 @@ function toolInput(input: unknown): Record<string, unknown> {
   return {};
 }
 
+/**
+ * A short label for what a call targeted. Models differ wildly in how much they narrate,
+ * so the step list is often the only visible sign that a variant is working.
+ */
+function callDetail(input: Record<string, unknown>): string | undefined {
+  for (const key of ['path', 'query', 'directory']) {
+    const value = input[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.length > 60 ? `${value.slice(0, 57)}...` : value;
+    }
+  }
+  return undefined;
+}
+
 export async function runLmAgent(
   variant: VariantState,
   model: vscode.LanguageModelChat,
@@ -157,11 +171,17 @@ export async function runLmAgent(
         return;
       }
 
-      variant.toolCalls.push({ id: call.callId, name: call.name, status: 'running' });
+      const input = toolInput(call.input);
+      variant.toolCalls.push({
+        id: call.callId,
+        name: call.name,
+        status: 'running',
+        detail: callDetail(input),
+      });
       variant.activity = call.name;
       options.onUpdate();
 
-      const output = await invokeTool(ctx, call.name, toolInput(call.input));
+      const output = await invokeTool(ctx, call.name, input);
 
       const record = variant.toolCalls.find((t) => t.id === call.callId);
       if (record) {

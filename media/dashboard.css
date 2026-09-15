@@ -164,6 +164,70 @@ h1 {
   flex-direction: column;
 }
 
+.steps {
+  font-size: 0.8em;
+}
+
+.step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.step {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-family: var(--vscode-editor-font-family);
+  padding: 1px 0;
+}
+
+.step::before {
+  content: '.';
+  opacity: 0.6;
+}
+
+.step-running::before {
+  content: '>';
+  color: var(--vscode-charts-blue);
+  opacity: 1;
+}
+
+.step-done::before {
+  content: 'v';
+  color: var(--vscode-charts-green);
+  opacity: 1;
+}
+
+.step-error::before {
+  content: 'x';
+  color: var(--vscode-charts-red);
+  opacity: 1;
+}
+
+.step-running {
+  color: var(--vscode-foreground);
+}
+
+.step-name {
+  flex: 0 0 auto;
+}
+
+.step-detail {
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-more {
+  opacity: 0.6;
+  padding-bottom: 2px;
+}
+
 .preview-bar {
   display: flex;
   align-items: center;

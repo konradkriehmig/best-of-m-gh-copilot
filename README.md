@@ -49,8 +49,13 @@ The equivalent, if you prefer typing:
 3. Choose how many sessions per model, and the base ref to branch from.
 4. Confirm. The cost warning shows how many agents are about to start.
 
-The dashboard then shows one card per variant with live status, streamed output, cost, diff size and
-verification result. When everything has finished, press **Keep this one** on the winner.
+The dashboard then shows one card per variant with live status, streamed output, a live step list,
+cost, diff size and verification result. When everything has finished, press **Keep this one** on
+the winner.
+
+Models differ a lot in how much they narrate. Some stream a running commentary, others say nothing
+until the end, so every card also shows the **steps** it is taking — each tool call with its target
+and whether it succeeded. That way a quiet model still visibly makes progress.
 
 ### Comparing the results
 
@@ -64,10 +69,14 @@ The file is picked from the variant's changed files: an HTML entry point wins, p
 then the shallowest path; otherwise the most interesting source file. **Open file** opens the real
 file in an editor.
 
-Rendered previews execute model-written JavaScript. It runs in an iframe with `allow-scripts` but
-**not** `allow-same-origin`, so it sits in an opaque origin and cannot reach the dashboard, the
-extension host, your editor or other variants. If you would rather never execute it, set
-`bestOfN.preview.mode` to `source`, or `off` to hide previews entirely.
+Rendered previews execute model-written JavaScript. The frame gets `allow-scripts` and
+`allow-same-origin`, but not top navigation, popups, forms or modals. `allow-same-origin` is
+required rather than optional: VS Code serves webview resources through a service worker, and a
+frame with an opaque origin cannot be served by it, so the preview would render blank. The frame
+lands on the resource origin rather than the dashboard's, so it still cannot reach the dashboard,
+the extension host or your editor, and only the current run's directory is exposed to it. If you
+would rather never execute it, set `bestOfN.preview.mode` to `source`, or `off` to hide previews
+entirely.
 
 ### From the chat window
 
@@ -160,9 +169,9 @@ Read this before your first run.
   credentials. Isolation here protects your *branch*, not your *machine*.
 - **N agents cost roughly N times as much** as a single session. The confirmation dialog and the
   chat reply both say how many are about to start.
-- **Rendered previews execute model-written JavaScript.** The frame gets `allow-scripts` but never
-  `allow-same-origin`, so generated pages run in an opaque origin and cannot reach the dashboard,
-  the extension host or each other. Set `bestOfN.preview.mode` to `source` or `off` to opt out.
+- **Rendered previews execute model-written JavaScript.** The frame runs on the webview resource
+  origin, not the dashboard's, and only the current run's directory is exposed to it. Set
+  `bestOfN.preview.mode` to `source` or `off` to opt out.
 
 ## Implementation notes
 
