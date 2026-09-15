@@ -101,6 +101,11 @@ Variants are ordered by objective signals first, with the model judge as a tie-b
 A variant whose tests fail never outranks one whose tests pass, no matter what the judge says. The
 ranking is a suggestion; you always choose the winner yourself.
 
+"A usable result" means the agent finished *and* actually changed a file. Weaker models sometimes
+explore and then stop without editing anything; when that happens the variant is nudged once to
+carry the task out, and if it still changes nothing it is marked **failed** with a "changed no
+files" message rather than a misleading green **done**.
+
 ## Settings
 
 | Setting | Default | Purpose |
