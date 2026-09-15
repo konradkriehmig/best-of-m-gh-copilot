@@ -107,6 +107,8 @@ export interface RunRecord {
   createdAt: number;
   finishedAt?: number;
   variants: VariantState[];
+  /** How many variants were allowed to run at the same time. */
+  maxConcurrent: number;
   judge?: JudgeVerdict;
   winnerId?: string;
   status: 'running' | 'finished' | 'cancelled';

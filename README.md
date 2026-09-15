@@ -140,7 +140,7 @@ files" message rather than a misleading green **done**.
 | `bestOfN.chat.fanOut` | `[]` | Models a `#bestofn` / `@bestofn` prompt fans out to, e.g. `["claude-opus-5", "gpt-5.6-sol x2"]` |
 | `bestOfN.cliPath` | auto-detect | Path to the `copilot` executable (`cli` engine only) |
 | `bestOfN.models` | `[]` | Extra model ids for the picker |
-| `bestOfN.maxConcurrent` | `4` | Sessions running at once; the rest queue |
+| `bestOfN.maxConcurrent` | `4` | Sessions running at once. If you pick more models than this, the confirmation dialog offers to run them all at once instead of queueing |
 | `bestOfN.worktreeRoot` | `<repo>/../.best-of-n` | Where worktrees are created |
 | `bestOfN.verifyCommand` | `""` | Command run in each worktree to score it, e.g. `npm test` |
 | `bestOfN.verifyTimeoutMs` | `600000` | Timeout for that command |

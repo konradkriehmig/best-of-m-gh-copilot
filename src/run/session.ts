@@ -106,6 +106,10 @@ export class RunController {
     const baseRef = plan.baseRef === 'HEAD' ? baseSha : plan.baseRef;
 
     const variants = await this.buildVariants(plan, runId, worktreeRoot);
+    const maxConcurrent = Math.max(
+      1,
+      plan.maxConcurrent ?? config().get<number>('maxConcurrent', 4),
+    );
 
     this.run = {
       runId,
@@ -116,6 +120,7 @@ export class RunController {
       worktreeRoot,
       createdAt: Date.now(),
       variants,
+      maxConcurrent,
       status: 'running',
     };
     this.ranking = [];
@@ -143,7 +148,7 @@ export class RunController {
         await runAll(variants, {
           invocation: this.invocation,
           prompt: plan.prompt,
-          maxConcurrent: config().get<number>('maxConcurrent', 4),
+          maxConcurrent,
           denyTools: config().get<string[]>('denyTools', []),
           disableBuiltinMcps: config().get<boolean>('disableBuiltinMcps', true),
           maxAiCredits: config().get<number>('maxAiCredits', 0),
@@ -154,7 +159,7 @@ export class RunController {
       } else {
         await runAllLm(variants, {
           prompt: plan.prompt,
-          maxConcurrent: config().get<number>('maxConcurrent', 4),
+          maxConcurrent,
           onUpdate: () => this.emit(),
           onLog: (message) => log().info(message),
           token,

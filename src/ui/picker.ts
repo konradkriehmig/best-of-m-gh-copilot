@@ -2,11 +2,17 @@ import * as vscode from 'vscode';
 import { discoverModels, ModelOption } from '../models/registry';
 import { listBranches, currentBranch } from '../git/exec';
 
+function config() {
+  return vscode.workspace.getConfiguration('bestOfN');
+}
+
 export interface RunPlan {
   prompt: string;
   /** Model id to number of replicas. */
   selection: Array<{ model: string; count: number }>;
   baseRef: string;
+  /** Overrides `bestOfN.maxConcurrent` for this run only. */
+  maxConcurrent?: number;
 }
 
 interface ModelQuickPickItem extends vscode.QuickPickItem {
@@ -104,23 +110,56 @@ async function pickBaseRef(repoRoot: string): Promise<string | undefined> {
   return picked?.label;
 }
 
-async function confirm(plan: RunPlan): Promise<boolean> {
+/**
+ * Confirms the run and settles how many variants may run at once.
+ *
+ * When the selection exceeds `bestOfN.maxConcurrent` the excess would silently sit in a
+ * QUEUED state, which reads as a bug rather than a deliberate cap. So the choice is offered
+ * here, at the only moment the user is thinking about how many agents to start.
+ *
+ * Returns the concurrency limit to use, or undefined if the user cancelled.
+ */
+async function confirm(plan: RunPlan): Promise<number | undefined> {
   const total = plan.selection.reduce((sum, entry) => sum + entry.count, 0);
   const breakdown = plan.selection.map((s) => `${s.count}x ${s.model}`).join(', ');
+  const configured = Math.max(1, config().get<number>('maxConcurrent', 4));
+  const capped = total > configured;
 
+  const shared =
+    `${breakdown}\n\nBase: ${plan.baseRef}\n\n` +
+    `This starts ${total} independent agents, so it costs roughly ${total}x a single ` +
+    `session in AI credits. Each one edits only its own worktree. Worktrees share your ` +
+    `filesystem and credentials and are not a security boundary.`;
+
+  if (!capped) {
+    const choice = await vscode.window.showWarningMessage(
+      `Run ${total} parallel agent sessions?`,
+      { modal: true, detail: shared },
+      'Run',
+    );
+    return choice === 'Run' ? configured : undefined;
+  }
+
+  const stagger = `Run ${configured} at a time`;
+  const all = `Run all ${total} at once`;
   const choice = await vscode.window.showWarningMessage(
-    `Run ${total} parallel agent sessions?`,
+    `Run ${total} agent sessions?`,
     {
       modal: true,
       detail:
-        `${breakdown}\n\nBase: ${plan.baseRef}\n\n` +
-        `This starts ${total} independent agents, so it costs roughly ${total}x a single ` +
-        `session in AI credits. Each runs with --allow-all-tools in its own worktree. ` +
-        `Worktrees share your filesystem and credentials and are not a security boundary.`,
+        `${shared}\n\n` +
+        `bestOfN.maxConcurrent is ${configured}, so ${total - configured} of them would wait ` +
+        `in a queue until a slot frees up. Running all at once is faster but hits Copilot ` +
+        `with ${total} simultaneous requests, which may be rate limited.`,
     },
-    'Run',
+    stagger,
+    all,
   );
-  return choice === 'Run';
+
+  if (choice === stagger) {
+    return configured;
+  }
+  return choice === all ? total : undefined;
 }
 
 export async function buildRunPlan(repoRoot: string): Promise<RunPlan | undefined> {
@@ -145,5 +184,9 @@ export async function buildRunPlan(repoRoot: string): Promise<RunPlan | undefine
   }
 
   const plan: RunPlan = { prompt, selection, baseRef };
-  return (await confirm(plan)) ? plan : undefined;
+  const maxConcurrent = await confirm(plan);
+  if (maxConcurrent === undefined) {
+    return undefined;
+  }
+  return { ...plan, maxConcurrent };
 }

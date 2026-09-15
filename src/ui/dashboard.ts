@@ -7,8 +7,6 @@ export type DashboardMessage =
   | { type: 'openFileDiff'; variantId: string; file: string }
   | { type: 'compare'; variantId: string; otherId: string }
   | { type: 'chooseWinner'; variantId: string }
-  | { type: 'openTerminal'; variantId: string }
-  | { type: 'openTranscript'; variantId: string }
   | { type: 'openFolder'; variantId: string }
   | { type: 'openPreview'; variantId: string }
   | { type: 'cancel' }

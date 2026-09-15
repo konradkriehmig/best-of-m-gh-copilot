@@ -29,8 +29,9 @@ function describeError(err: unknown): string {
 }
 
 /**
- * The language model API streams no durable transcript, so write one ourselves. This is
- * what the dashboard's transcript button opens.
+ * The language model API streams no durable transcript, so write one ourselves. Nothing in
+ * the UI opens it, but it is the only record of what a variant actually did, and reading it
+ * is how a variant that silently changed nothing was diagnosed.
  */
 async function writeTranscript(variant: VariantState, prompt: string): Promise<void> {
   const lines = [

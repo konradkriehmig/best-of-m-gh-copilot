@@ -43,6 +43,7 @@ function run(variants: VariantState[], judge?: RunRecord['judge']): RunRecord {
     worktreeRoot: '/wt',
     createdAt: 0,
     variants,
+    maxConcurrent: variants.length,
     judge,
     status: 'finished',
   };

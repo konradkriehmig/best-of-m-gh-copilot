@@ -104,36 +104,6 @@ async function handleWinner(context: vscode.ExtensionContext, variantId: string)
   );
 }
 
-async function openTerminal(variantId: string): Promise<void> {
-  const variant = controller?.variant(variantId);
-  if (!variant) {
-    return;
-  }
-  const terminal = vscode.window.createTerminal({
-    name: `Best of N: ${variant.label}`,
-    cwd: variant.worktreePath,
-  });
-  terminal.show();
-}
-
-async function openTranscript(variantId: string): Promise<void> {
-  const variant = controller?.variant(variantId);
-  if (!variant) {
-    return;
-  }
-  // The shared markdown transcript is far more readable than the raw JSONL.
-  for (const candidate of [variant.sharePath, variant.transcriptPath]) {
-    try {
-      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(candidate));
-      await vscode.window.showTextDocument(doc, { preview: true });
-      return;
-    } catch {
-      // try the next candidate
-    }
-  }
-  void vscode.window.showInformationMessage(`No transcript was written for ${variant.label}.`);
-}
-
 function wireDashboard(context: vscode.ExtensionContext, dashboard: Dashboard): void {
   const subscription = dashboard.onMessage((message: DashboardMessage) => {
     const run = controller?.current;
@@ -145,12 +115,6 @@ function wireDashboard(context: vscode.ExtensionContext, dashboard: Dashboard): 
             break;
           case 'chooseWinner':
             await handleWinner(context, message.variantId);
-            break;
-          case 'openTerminal':
-            await openTerminal(message.variantId);
-            break;
-          case 'openTranscript':
-            await openTranscript(message.variantId);
             break;
           case 'openPreview': {
             const variant = controller?.variant(message.variantId);

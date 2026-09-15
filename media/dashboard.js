@@ -203,6 +203,18 @@
       node.appendChild(el('div', 'activity', variant.activity ? '> ' + variant.activity : '> working'));
     }
 
+    // A queued card looks identical to a stuck one unless the cap is spelled out.
+    if (variant.status === 'queued') {
+      var limit = (state.run && state.run.maxConcurrent) || 0;
+      node.appendChild(el(
+        'div',
+        'activity',
+        limit > 0
+          ? '> waiting for a slot (' + limit + ' run at a time, bestOfN.maxConcurrent)'
+          : '> waiting for a slot',
+      ));
+    }
+
     if (variant.error) {
       node.appendChild(el('div', 'error', variant.error));
     }
@@ -255,14 +267,6 @@
       post({ type: 'chooseWinner', variantId: variant.id });
     }, true, !finished || !hasDiff || busy));
 
-    actions.appendChild(button('Terminal', function () {
-      post({ type: 'openTerminal', variantId: variant.id });
-    }, false, busy));
-
-    actions.appendChild(button('Transcript', function () {
-      post({ type: 'openTranscript', variantId: variant.id });
-    }, false, busy));
-
     node.appendChild(actions);
     return node;
   }
@@ -280,7 +284,13 @@
     const left = el('div');
     left.appendChild(el('h1', undefined, 'Best of N - ' + run.variants.length + ' variants'));
     left.appendChild(el('p', 'prompt', run.prompt));
-    left.appendChild(el('div', 'meta', 'base ' + run.baseRef + '  |  run ' + run.runId + '  |  ' + run.status));
+
+    var meta = 'base ' + run.baseRef + '  |  run ' + run.runId + '  |  ' + run.status;
+    var limit = run.maxConcurrent || run.variants.length;
+    if (limit < run.variants.length) {
+      meta += '  |  ' + limit + ' at a time';
+    }
+    left.appendChild(el('div', 'meta', meta));
     header.appendChild(left);
 
     if (run.status === 'running') {
