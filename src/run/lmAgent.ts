@@ -34,9 +34,22 @@ function systemPreamble(worktreePath: string): string {
     '- Make the smallest change that fully solves the task. Do not refactor unrelated code.',
     '- All paths are relative to the project root. You cannot access anything outside it.',
     '- Do not create summary, notes or planning files unless the task asks for them.',
+    '- Reading and searching alone never completes a task. You must call write_file or',
+    '  replace_in_file to actually change the project, otherwise you have done nothing.',
     '- When the task is complete, reply with a short summary of what you changed and stop calling tools.',
   ].join('\n');
 }
+
+/**
+ * Sent when a model stops calling tools without having written anything. Weaker models
+ * often narrate a plan, or simply return an empty turn, and then stop; a single explicit
+ * nudge is usually enough to get them to carry it out.
+ */
+const NUDGE = [
+  'You have not changed any files yet, so the task is not done.',
+  'If the task still requires work, carry it out now using write_file or replace_in_file.',
+  'If you are certain no change is required, reply explaining why, and make no tool calls.',
+].join(' ');
 
 /** Coerce a tool call's input, which arrives as an unknown object from the model. */
 function toolInput(input: unknown): Record<string, unknown> {
@@ -65,6 +78,7 @@ export async function runLmAgent(
   ];
 
   variant.assistantText = '';
+  let nudged = false;
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     if (options.token.isCancellationRequested) {
@@ -103,9 +117,34 @@ export async function runLmAgent(
     }
 
     if (toolCalls.length === 0) {
-      // No tools requested: the model considers the task finished.
-      variant.assistantText = turnText.trim().length > 0 ? turnText : variant.assistantText;
+      // The model stopped asking for tools. That only means "finished" if it actually
+      // changed something; otherwise nudge it once, then report the no-op honestly
+      // rather than letting an empty run be marked done.
+      if (turnText.trim().length > 0) {
+        variant.assistantText = turnText;
+      }
+
+      if (ctx.touched.size > 0) {
+        variant.activity = undefined;
+        return;
+      }
+
+      if (!nudged) {
+        nudged = true;
+        // An empty assistant turn is not always a valid message to send back, so only
+        // replay it when the model actually produced something.
+        if (assistantParts.length > 0) {
+          messages.push(vscode.LanguageModelChatMessage.Assistant(assistantParts));
+        }
+        messages.push(vscode.LanguageModelChatMessage.User(NUDGE));
+        continue;
+      }
+
       variant.activity = undefined;
+      variant.error =
+        turnText.trim().length > 0
+          ? 'The model stopped without changing any files.'
+          : 'The model returned nothing and changed no files.';
       return;
     }
 

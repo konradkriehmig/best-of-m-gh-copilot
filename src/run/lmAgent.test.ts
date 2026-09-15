@@ -69,7 +69,7 @@ afterEach(async () => {
 });
 
 describe('runLmAgent', () => {
-  it('stops on the first turn when no tools are called', async () => {
+  it('nudges once, then reports a no-op when the model never changes anything', async () => {
     const variant = makeVariant(root);
     const { model, turnCount } = fakeModel([[new vscode.LanguageModelTextPart('All done.')]]);
 
@@ -80,8 +80,71 @@ describe('runLmAgent', () => {
       onUpdate: () => undefined,
     });
 
-    expect(turnCount()).toBe(1);
+    expect(turnCount()).toBe(2);
     expect(variant.assistantText).toBe('All done.');
+    expect(variant.error).toMatch(/without changing any files/);
+  });
+
+  it('reports a no-op when the model returns nothing at all', async () => {
+    const variant = makeVariant(root);
+    const { model, turnCount } = fakeModel([[]]);
+
+    await runLmAgent(variant, model as unknown as vscode.LanguageModelChat, {
+      prompt: 'do nothing',
+      worktreePath: root,
+      token: noToken,
+      onUpdate: () => undefined,
+    });
+
+    expect(turnCount()).toBe(2);
+    expect(variant.error).toMatch(/returned nothing/);
+  });
+
+  it('accepts the nudge and finishes cleanly when the model then edits', async () => {
+    const variant = makeVariant(root);
+    const { model, turnCount } = fakeModel([
+      [new vscode.LanguageModelTextPart('I will look around first.')],
+      [
+        new vscode.LanguageModelToolCallPart('c1', 'write_file', {
+          path: 'hello.txt',
+          content: 'hi\n',
+        }),
+      ],
+      [new vscode.LanguageModelTextPart('Created hello.txt.')],
+    ]);
+
+    await runLmAgent(variant, model as unknown as vscode.LanguageModelChat, {
+      prompt: 'create hello.txt',
+      worktreePath: root,
+      token: noToken,
+      onUpdate: () => undefined,
+    });
+
+    expect(turnCount()).toBe(3);
+    expect(variant.error).toBeUndefined();
+    expect(await fs.readFile(path.join(root, 'hello.txt'), 'utf8')).toBe('hi\n');
+  });
+
+  it('does not nudge a model that has already made a change', async () => {
+    const variant = makeVariant(root);
+    const { model, turnCount } = fakeModel([
+      [
+        new vscode.LanguageModelToolCallPart('c1', 'write_file', {
+          path: 'a.txt',
+          content: 'x\n',
+        }),
+      ],
+      [new vscode.LanguageModelTextPart('Done.')],
+    ]);
+
+    await runLmAgent(variant, model as unknown as vscode.LanguageModelChat, {
+      prompt: 'write a.txt',
+      worktreePath: root,
+      token: noToken,
+      onUpdate: () => undefined,
+    });
+
+    expect(turnCount()).toBe(2);
     expect(variant.error).toBeUndefined();
   });
 
@@ -117,7 +180,13 @@ describe('runLmAgent', () => {
     const variant = makeVariant(root);
     const { model } = fakeModel([
       [new vscode.LanguageModelToolCallPart('c1', 'read_file', { path: 'missing.txt' })],
-      [new vscode.LanguageModelTextPart('Nothing to do.')],
+      [
+        new vscode.LanguageModelToolCallPart('c2', 'write_file', {
+          path: 'missing.txt',
+          content: 'created\n',
+        }),
+      ],
+      [new vscode.LanguageModelTextPart('Created it instead.')],
     ]);
 
     await runLmAgent(variant, model as unknown as vscode.LanguageModelChat, {
@@ -128,6 +197,7 @@ describe('runLmAgent', () => {
     });
 
     expect(variant.toolCalls[0].status).toBe('error');
+    expect(variant.toolCalls[1].status).toBe('done');
     expect(variant.error).toBeUndefined();
   });
 
