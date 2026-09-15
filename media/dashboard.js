@@ -2,6 +2,9 @@
   const vscode = acquireVsCodeApi();
   const root = document.getElementById('root');
 
+  /** Per-variant choice of rendered output vs source, remembered across re-renders. */
+  const showSource = {};
+
   /** All model- and agent-produced text goes through textContent, never innerHTML. */
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -87,6 +90,72 @@
     return wrapper;
   }
 
+  function previewFor(variant, state) {
+    const preview = variant.preview;
+    const settings = state.preview || { mode: 'rendered', height: 320 };
+    if (!preview || settings.mode === 'off') {
+      return null;
+    }
+
+    const wrapper = el('div', 'preview');
+
+    const bar = el('div', 'preview-bar');
+    bar.appendChild(el('span', 'preview-file', preview.file));
+
+    // Enforced here as well as in the extension: source mode must never execute
+    // generated HTML, whatever the payload happens to contain.
+    const isHtml =
+      preview.kind === 'html' && Boolean(preview.uri) && settings.mode === 'rendered';
+    // Rendered output is the point of the comparison, so it is the default when we have it.
+    const key = variant.id;
+    if (showSource[key] === undefined) {
+      showSource[key] = !isHtml;
+    }
+
+    if (isHtml) {
+      const toggle = el('div', 'preview-toggle');
+      toggle.appendChild(button('Rendered', function () {
+        showSource[key] = false;
+        render(state);
+      }, !showSource[key]));
+      toggle.appendChild(button('Source', function () {
+        showSource[key] = true;
+        render(state);
+      }, showSource[key]));
+      bar.appendChild(toggle);
+    }
+
+    const open = button('Open file', function () {
+      post({ type: 'openPreview', variantId: variant.id });
+    });
+    open.className = 'link';
+    bar.appendChild(open);
+    wrapper.appendChild(bar);
+
+    if (isHtml && !showSource[key]) {
+      const frame = document.createElement('iframe');
+      frame.className = 'preview-frame';
+      frame.style.height = settings.height + 'px';
+      // No allow-same-origin: generated pages stay in an opaque origin and cannot reach
+      // the dashboard, the extension host, or each other.
+      frame.setAttribute('sandbox', 'allow-scripts allow-pointer-lock');
+      frame.setAttribute('loading', 'lazy');
+      frame.src = preview.uri;
+      wrapper.appendChild(frame);
+    } else if (preview.code) {
+      const code = el('pre', 'preview-code', preview.code);
+      code.style.maxHeight = settings.height + 'px';
+      wrapper.appendChild(code);
+      if (preview.truncated) {
+        wrapper.appendChild(el('div', 'preview-note', 'Truncated. Use "Open file" for the rest.'));
+      }
+    } else {
+      wrapper.appendChild(el('div', 'preview-note', 'Nothing to preview.'));
+    }
+
+    return wrapper;
+  }
+
   function card(variant, ranked, state) {
     const isWinner = state.run && state.run.winnerId === variant.id;
     const node = el('div', 'card' + (isWinner ? ' winner' : ''));
@@ -132,6 +201,11 @@
     const files = filesFor(variant);
     if (files) {
       node.appendChild(files);
+    }
+
+    const preview = previewFor(variant, state);
+    if (preview) {
+      node.appendChild(preview);
     }
 
     const actions = el('div', 'actions');

@@ -12,6 +12,7 @@ import { log } from '../util/log';
 import { RankedVariant, RunRecord, VariantState } from '../util/types';
 import { runAll } from './runner';
 import { runAllLm } from './lmRunner';
+import { buildPreview } from './preview';
 import { runCheck } from '../score/checks';
 import { runJudge } from '../score/judge';
 import { runLmJudge } from '../score/lmJudge';
@@ -189,6 +190,7 @@ export class RunController {
         await commitVariantWork(variant.worktreePath, `Best of N: ${variant.label}`);
         variant.diff = await diffStat(this.run.repoRoot, this.run.baseRef, variant.branch);
         this.diffs.set(variant.id, await diffText(this.run.repoRoot, this.run.baseRef, variant.branch));
+        variant.preview = await buildPreview(variant.worktreePath, variant.diff.files);
       } catch (err) {
         log().warn(`Could not capture changes for ${variant.label}: ${String(err)}`);
       }

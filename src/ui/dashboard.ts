@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { RankedVariant, RunRecord } from '../util/types';
+import { RankedVariant, RunRecord, VariantState } from '../util/types';
 
 export type DashboardMessage =
   | { type: 'openDiff'; variantId: string }
@@ -9,6 +9,7 @@ export type DashboardMessage =
   | { type: 'openTerminal'; variantId: string }
   | { type: 'openTranscript'; variantId: string }
   | { type: 'openFolder'; variantId: string }
+  | { type: 'openPreview'; variantId: string }
   | { type: 'cancel' }
   | { type: 'ready' };
 
@@ -16,6 +17,7 @@ export interface DashboardState {
   run?: RunRecord;
   ranking: RankedVariant[];
   busy?: string;
+  preview?: { mode: 'rendered' | 'source' | 'off'; height: number };
 }
 
 function nonce(): string {
@@ -34,6 +36,7 @@ export class Dashboard {
   private readonly handlers = new Set<(message: DashboardMessage) => void>();
   private state: DashboardState = { ranking: [] };
   private ready = false;
+  private grantedRoot: string | undefined;
 
   private constructor(private readonly extensionUri: vscode.Uri) {
     this.panel = vscode.window.createWebviewPanel(
@@ -82,10 +85,59 @@ export class Dashboard {
   }
 
   update(state: DashboardState): void {
-    this.state = state;
+    this.state = this.withPreviewUris(state);
     if (this.ready) {
-      void this.panel.webview.postMessage({ type: 'state', state });
+      void this.panel.webview.postMessage({ type: 'state', state: this.state });
     }
+  }
+
+  /**
+   * Framing a variant's HTML straight out of its worktree keeps relative assets working,
+   * but the webview will only load paths it has been granted. Worktree locations are not
+   * known until a run starts, so widen the roots here and swap absolute paths for webview
+   * URIs, which is the only form the dashboard can use.
+   */
+  private withPreviewUris(state: DashboardState): DashboardState {
+    const settings = vscode.workspace.getConfiguration('bestOfN');
+    const mode = settings.get<'rendered' | 'source' | 'off'>('preview.mode', 'rendered');
+    const height = settings.get<number>('preview.height', 320);
+    const withSettings = { ...state, preview: { mode, height } };
+
+    const run = state.run;
+    if (!run || mode === 'off') {
+      return withSettings;
+    }
+
+    if (run.worktreeRoot && run.worktreeRoot !== this.grantedRoot) {
+      this.grantedRoot = run.worktreeRoot;
+      this.panel.webview.options = {
+        enableScripts: true,
+        localResourceRoots: [
+          vscode.Uri.joinPath(this.extensionUri, 'media'),
+          vscode.Uri.file(run.worktreeRoot),
+        ],
+      };
+    }
+
+    const withUri = (variant: VariantState): VariantState => {
+      // Only a rendered preview needs a URI; source mode must never be framable.
+      if (!variant.preview || variant.preview.kind !== 'html' || mode !== 'rendered') {
+        return variant;
+      }
+      return {
+        ...variant,
+        preview: {
+          ...variant.preview,
+          uri: this.panel.webview.asWebviewUri(vscode.Uri.file(variant.preview.path)).toString(),
+        },
+      };
+    };
+
+    return {
+      ...withSettings,
+      run: { ...run, variants: run.variants.map(withUri) },
+      ranking: state.ranking.map((entry) => ({ ...entry, variant: withUri(entry.variant) })),
+    };
   }
 
   dispose(): void {
@@ -111,7 +163,7 @@ export class Dashboard {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${n}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${n}'; frame-src ${webview.cspSource};">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="${styleUri}" rel="stylesheet">
 <title>Best of N</title>

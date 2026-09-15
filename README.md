@@ -52,6 +52,23 @@ The equivalent, if you prefer typing:
 The dashboard then shows one card per variant with live status, streamed output, cost, diff size and
 verification result. When everything has finished, press **Keep this one** on the winner.
 
+### Comparing the results
+
+Each finished card shows a preview of what the variant actually produced, under the changed files:
+
+- **HTML** is rendered live in a sandboxed frame, so you can compare the real thing side by side
+  instead of reading three descriptions of it. Toggle between **Rendered** and **Source**.
+- **Anything else** — Python, TypeScript, Rust and so on — is shown as source.
+
+The file is picked from the variant's changed files: an HTML entry point wins, preferring `index`,
+then the shallowest path; otherwise the most interesting source file. **Open file** opens the real
+file in an editor.
+
+Rendered previews execute model-written JavaScript. It runs in an iframe with `allow-scripts` but
+**not** `allow-same-origin`, so it sits in an opaque origin and cannot reach the dashboard, the
+extension host, your editor or other variants. If you would rather never execute it, set
+`bestOfN.preview.mode` to `source`, or `off` to hide previews entirely.
+
 ### From the chat window
 
 In **Agent mode**, reference the tool with `#`:
@@ -126,6 +143,8 @@ files" message rather than a misleading green **done**.
 | `bestOfN.maxAiCredits` | `0` | Per-variant credit cap; 0 leaves it unset (`cli` engine only) |
 | `bestOfN.copyIgnoredFiles` | `[".env", ".env.local"]` | Ignored files copied into each worktree |
 | `bestOfN.keepLoserBranches` | `true` | Keep branches of variants you did not pick |
+| `bestOfN.preview.mode` | `rendered` | Preview under each card: `rendered`, `source`, or `off` |
+| `bestOfN.preview.height` | `320` | Height in pixels of the preview area |
 
 ## Safety
 
@@ -141,6 +160,9 @@ Read this before your first run.
   credentials. Isolation here protects your *branch*, not your *machine*.
 - **N agents cost roughly N times as much** as a single session. The confirmation dialog and the
   chat reply both say how many are about to start.
+- **Rendered previews execute model-written JavaScript.** The frame gets `allow-scripts` but never
+  `allow-same-origin`, so generated pages run in an opaque origin and cannot reach the dashboard,
+  the extension host or each other. Set `bestOfN.preview.mode` to `source` or `off` to opt out.
 
 ## Implementation notes
 

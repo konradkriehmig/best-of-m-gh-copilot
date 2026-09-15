@@ -152,6 +152,16 @@ function wireDashboard(context: vscode.ExtensionContext, dashboard: Dashboard): 
           case 'openTranscript':
             await openTranscript(message.variantId);
             break;
+          case 'openPreview': {
+            const variant = controller?.variant(message.variantId);
+            if (variant?.preview) {
+              const doc = await vscode.workspace.openTextDocument(
+                vscode.Uri.file(variant.preview.path),
+              );
+              await vscode.window.showTextDocument(doc, { preview: true });
+            }
+            break;
+          }
           case 'openDiff': {
             const variant = controller?.variant(message.variantId);
             if (run && variant && diffProvider) {

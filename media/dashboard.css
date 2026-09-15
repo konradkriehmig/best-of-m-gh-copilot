@@ -156,6 +156,81 @@ h1 {
   margin-top: auto;
 }
 
+.preview {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--vscode-editorWidget-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 0.8em;
+}
+
+.preview-file {
+  font-family: var(--vscode-editor-font-family);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-toggle {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.preview-toggle button {
+  padding: 1px 8px;
+  font-size: 0.95em;
+}
+
+.preview-bar button.link {
+  background: none;
+  border: none;
+  color: var(--vscode-textLink-foreground);
+  padding: 1px 4px;
+  cursor: pointer;
+}
+
+.preview-bar button.link:hover {
+  text-decoration: underline;
+}
+
+/* White, because generated pages assume a light page and often set no background. */
+.preview-frame {
+  width: 100%;
+  height: 320px;
+  border: 0;
+  display: block;
+  background: #fff;
+}
+
+.preview-code {
+  margin: 0;
+  padding: 8px;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.8em;
+  white-space: pre;
+  background: var(--vscode-textCodeBlock-background);
+}
+
+.preview-note {
+  padding: 4px 8px;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
 button {
   font-family: inherit;
   font-size: 0.85em;

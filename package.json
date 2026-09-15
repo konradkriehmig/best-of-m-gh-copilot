@@ -2,7 +2,7 @@
   "name": "best-of-n",
   "displayName": "Best of N",
   "description": "Fire one prompt at several GitHub Copilot models at once, each in its own git worktree, then compare the results and keep the best.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "konradkriehmig",
   "license": "MIT",
   "private": true,
@@ -220,6 +220,28 @@
           "type": "boolean",
           "default": true,
           "description": "Open the dashboard automatically when a run starts."
+        },
+        "bestOfN.preview.mode": {
+          "type": "string",
+          "enum": [
+            "rendered",
+            "source",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Show HTML results rendered in a sandboxed frame, and other results as source.",
+            "Always show source, never execute generated HTML.",
+            "Do not show a preview under the cards."
+          ],
+          "default": "rendered",
+          "description": "What to show under each variant card. Rendered previews run generated HTML in a sandboxed frame that cannot reach your editor or the network origin, but it is still model-written code."
+        },
+        "bestOfN.preview.height": {
+          "type": "number",
+          "default": 320,
+          "minimum": 120,
+          "maximum": 1200,
+          "description": "Height in pixels of the rendered preview frame under each variant card."
         }
       }
     },
