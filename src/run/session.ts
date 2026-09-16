@@ -32,6 +32,8 @@ export class RunController {
   private ranking: RankedVariant[] = [];
   private cancellation: vscode.CancellationTokenSource | undefined;
   private readonly diffs = new Map<string, string>();
+  /** One source per variant, so a single agent can be stopped without touching the rest. */
+  private readonly variantCancels = new Map<string, vscode.CancellationTokenSource>();
 
   constructor(
     private readonly invocation: CliInvocation | undefined,
@@ -57,6 +59,33 @@ export class RunController {
 
   cancel(): void {
     this.cancellation?.cancel();
+  }
+
+  /**
+   * Stop one variant and leave the others running.
+   *
+   * A queued variant has no in-flight work to interrupt, so it is marked straight away;
+   * its worker still calls into the runner, which sees the cancelled token and skips it.
+   * Only queued and running agents are stoppable: the verify command is a plain child
+   * process with no token, so offering to cancel it would do nothing.
+   */
+  cancelVariant(id: string): void {
+    const variant = this.variant(id);
+    if (!variant) {
+      return;
+    }
+    if (variant.status !== 'queued' && variant.status !== 'running') {
+      return;
+    }
+
+    this.variantCancels.get(id)?.cancel();
+    if (variant.status === 'queued') {
+      variant.status = 'cancelled';
+      variant.endedAt = Date.now();
+      variant.activity = undefined;
+    }
+    log().info(`[${variant.label}] stopped by the user`);
+    this.emit();
   }
 
   private emit(): void {
@@ -106,10 +135,11 @@ export class RunController {
     const baseRef = plan.baseRef === 'HEAD' ? baseSha : plan.baseRef;
 
     const variants = await this.buildVariants(plan, runId, worktreeRoot);
-    const maxConcurrent = Math.max(
-      1,
-      plan.maxConcurrent ?? config().get<number>('maxConcurrent', 4),
-    );
+    // 0 means "start them all", which is the point of best-of-N: the whole selection
+    // should be racing, not trickling through a queue. A positive value is an opt-in cap
+    // for anyone Copilot rate limits.
+    const configured = config().get<number>('maxConcurrent', 0);
+    const maxConcurrent = configured > 0 ? configured : variants.length;
 
     this.run = {
       runId,
@@ -129,6 +159,21 @@ export class RunController {
 
     this.cancellation = new vscode.CancellationTokenSource();
     const token = this.cancellation.token;
+
+    // Each variant gets its own source so the dashboard can stop one agent. Cancelling the
+    // run cancels all of them, which is why the runners only ever consult the per-variant
+    // token: both routes arrive at the same place.
+    this.variantCancels.clear();
+    for (const variant of variants) {
+      this.variantCancels.set(variant.id, new vscode.CancellationTokenSource());
+    }
+    const cancelAll = token.onCancellationRequested(() => {
+      for (const source of this.variantCancels.values()) {
+        source.cancel();
+      }
+    });
+    const tokenFor = (variant: VariantState): vscode.CancellationToken =>
+      this.variantCancels.get(variant.id)?.token ?? token;
 
     try {
       this.callbacks.onBusy(`Creating ${variants.length} worktrees...`);
@@ -155,6 +200,7 @@ export class RunController {
           onUpdate: () => this.emit(),
           onLog: (message) => log().info(message),
           token,
+          tokenFor,
         });
       } else {
         await runAllLm(variants, {
@@ -163,6 +209,7 @@ export class RunController {
           onUpdate: () => this.emit(),
           onLog: (message) => log().info(message),
           token,
+          tokenFor,
         });
       }
 
@@ -174,6 +221,11 @@ export class RunController {
       this.emit();
     } finally {
       this.callbacks.onBusy(undefined);
+      cancelAll.dispose();
+      for (const source of this.variantCancels.values()) {
+        source.dispose();
+      }
+      this.variantCancels.clear();
       this.cancellation?.dispose();
       this.cancellation = undefined;
     }

@@ -113,6 +113,9 @@ function wireDashboard(context: vscode.ExtensionContext, dashboard: Dashboard): 
           case 'cancel':
             controller?.cancel();
             break;
+          case 'cancelVariant':
+            controller?.cancelVariant(message.variantId);
+            break;
           case 'chooseWinner':
             await handleWinner(context, message.variantId);
             break;

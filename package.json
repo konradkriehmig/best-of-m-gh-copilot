@@ -2,7 +2,7 @@
   "name": "best-of-n",
   "displayName": "Best of N",
   "description": "Fire one prompt at several GitHub Copilot models at once, each in its own git worktree, then compare the results and keep the best.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "konradkriehmig",
   "license": "MIT",
   "private": true,
@@ -145,10 +145,10 @@
         },
         "bestOfN.maxConcurrent": {
           "type": "number",
-          "default": 4,
-          "minimum": 1,
+          "default": 0,
+          "minimum": 0,
           "maximum": 16,
-          "description": "Maximum number of agent sessions running at the same time. Extra variants are queued."
+          "markdownDescription": "Maximum number of agent sessions running at the same time. `0` runs every variant at once, which is the default; a positive number queues the rest. Raise it above 0 only if Copilot rate limits you."
         },
         "bestOfN.worktreeRoot": {
           "type": "string",

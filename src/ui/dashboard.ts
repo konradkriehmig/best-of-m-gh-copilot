@@ -9,6 +9,7 @@ export type DashboardMessage =
   | { type: 'openFolder'; variantId: string }
   | { type: 'openPreview'; variantId: string }
   | { type: 'cancel' }
+  | { type: 'cancelVariant'; variantId: string }
   | { type: 'ready' };
 
 export interface DashboardState {

@@ -195,6 +195,18 @@
     }
     head.appendChild(title);
     head.appendChild(el('span', 'status ' + variant.status, isWinner ? 'winner' : variant.status));
+
+    // Stoppable only while there is something to stop. A verify command is a plain child
+    // process with no cancellation, so no X is offered once a variant reaches that stage.
+    if (variant.status === 'queued' || variant.status === 'running') {
+      const stop = button('\u00d7', function () {
+        post({ type: 'cancelVariant', variantId: variant.id });
+      });
+      stop.className = 'stop';
+      stop.title = 'Stop this agent, and leave the others running';
+      stop.setAttribute('aria-label', 'Stop ' + variant.label);
+      head.appendChild(stop);
+    }
     node.appendChild(head);
 
     node.appendChild(statsFor(variant));
@@ -290,6 +302,9 @@
     if (limit < run.variants.length) {
       meta += '  |  ' + limit + ' at a time';
     }
+    // There is no confirmation dialog any more, so the cost of racing N agents is stated
+    // here instead, where it stays visible for the whole run.
+    meta += '  |  ~' + run.variants.length + 'x the credits of one session';
     left.appendChild(el('div', 'meta', meta));
     header.appendChild(left);
 

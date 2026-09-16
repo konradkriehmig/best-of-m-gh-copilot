@@ -20,6 +20,8 @@ export interface RunnerOptions {
   onUpdate: (variant: VariantState) => void;
   onLog: (message: string) => void;
   token?: CancellationLike;
+  /** Per-variant token, so one agent can be stopped without ending the run. */
+  tokenFor?: (variant: VariantState) => CancellationLike;
 }
 
 /**
@@ -88,8 +90,12 @@ async function readUsage(usagePath: string): Promise<UsageReport | undefined> {
 
 function runVariant(variant: VariantState, options: RunnerOptions): Promise<void> {
   return new Promise<void>((resolve) => {
-    if (options.token?.isCancellationRequested) {
+    // Cancelling the run cancels every per-variant token, so this one covers both routes.
+    const token = options.tokenFor?.(variant) ?? options.token;
+
+    if (token?.isCancellationRequested) {
       variant.status = 'cancelled';
+      variant.endedAt = variant.endedAt ?? Date.now();
       options.onUpdate(variant);
       resolve();
       return;
@@ -127,7 +133,7 @@ function runVariant(variant: VariantState, options: RunnerOptions): Promise<void
     let cancelled = false;
     let settled = false;
 
-    const subscription = options.token?.onCancellationRequested(() => {
+    const subscription = token?.onCancellationRequested(() => {
       cancelled = true;
       killTree(child);
     });

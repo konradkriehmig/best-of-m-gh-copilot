@@ -10,6 +10,8 @@ export interface LmRunnerOptions {
   onUpdate: (variant: VariantState) => void;
   onLog: (message: string) => void;
   token: vscode.CancellationToken;
+  /** Per-variant token, so one agent can be stopped without ending the run. */
+  tokenFor?: (variant: VariantState) => vscode.CancellationToken;
 }
 
 function describeError(err: unknown): string {
@@ -67,8 +69,12 @@ async function writeTranscript(variant: VariantState, prompt: string): Promise<v
 }
 
 async function runOne(variant: VariantState, options: LmRunnerOptions): Promise<void> {
-  if (options.token.isCancellationRequested) {
+  // Cancelling the run cancels every per-variant token, so this one covers both routes.
+  const token = options.tokenFor?.(variant) ?? options.token;
+
+  if (token.isCancellationRequested) {
     variant.status = 'cancelled';
+    variant.endedAt = variant.endedAt ?? Date.now();
     options.onUpdate(variant);
     return;
   }
@@ -85,16 +91,21 @@ async function runOne(variant: VariantState, options: LmRunnerOptions): Promise<
     await runLmAgent(variant, model, {
       prompt: options.prompt,
       worktreePath: variant.worktreePath,
-      token: options.token,
+      token,
       onUpdate: () => options.onUpdate(variant),
     });
 
     if ((variant.status as VariantStatus) !== 'cancelled') {
-      variant.status = variant.error ? 'failed' : 'done';
+      variant.status = token.isCancellationRequested
+        ? 'cancelled'
+        : variant.error
+          ? 'failed'
+          : 'done';
     }
   } catch (err) {
-    if (options.token.isCancellationRequested) {
+    if (token.isCancellationRequested) {
       variant.status = 'cancelled';
+      variant.error = undefined;
     } else {
       variant.status = 'failed';
       variant.error = describeError(err);

@@ -47,11 +47,14 @@ The equivalent, if you prefer typing:
 2. Select the models. Selecting a single model is fine — you will be asked how many sessions to run
    on it, which gives you best-of-N on one model.
 3. Choose how many sessions per model, and the base ref to branch from.
-4. Confirm. The cost warning shows how many agents are about to start.
+
+The run starts as soon as you pick the base — there is no confirmation step, and every variant
+starts at once rather than queueing.
 
 The dashboard then shows one card per variant with live status, streamed output, a live step list,
-cost, diff size and verification result. When everything has finished, press **Keep this one** on
-the winner.
+cost, diff size and verification result. Press **×** on any card to stop that agent and leave the
+rest running; **Cancel run** stops all of them. When everything has finished, press **Keep this
+one** on the winner.
 
 Models differ a lot in how much they narrate. Some stream a running commentary, others say nothing
 until the end, so every card also shows the **steps** it is taking — each tool call with its target
@@ -139,7 +142,7 @@ files" message rather than a misleading green **done**.
 | `bestOfN.chat.fanOut` | `[]` | Models a `#bestofn` / `@bestofn` prompt fans out to, e.g. `["claude-opus-5", "gpt-5.6-sol x2"]` |
 | `bestOfN.cliPath` | auto-detect | Path to the `copilot` executable (`cli` engine only) |
 | `bestOfN.models` | `[]` | Extra model ids for the picker |
-| `bestOfN.maxConcurrent` | `4` | Sessions running at once. If you pick more models than this, the confirmation dialog offers to run them all at once instead of queueing |
+| `bestOfN.maxConcurrent` | `0` | Sessions running at once. `0` starts every variant immediately, which is the default; set a positive number to queue the rest if Copilot rate limits you |
 | `bestOfN.worktreeRoot` | `<repo>/../.best-of-n` | Where worktrees are created |
 | `bestOfN.verifyCommand` | `""` | Command run in each worktree to score it, e.g. `npm test` |
 | `bestOfN.verifyTimeoutMs` | `600000` | Timeout for that command |
@@ -166,8 +169,9 @@ Read this before your first run.
   the main control there, and it blocks `git push` by default.
 - **Worktrees are not a security boundary.** They share your filesystem, environment and
   credentials. Isolation here protects your *branch*, not your *machine*.
-- **N agents cost roughly N times as much** as a single session. The confirmation dialog and the
-  chat reply both say how many are about to start.
+- **N agents cost roughly N times as much** as a single session. The dashboard header states the
+  multiple for the whole run, and the chat reply says how many are about to start. Nothing asks you
+  to confirm, so the number of variants you pick is the number that starts.
 - **Rendered previews execute model-written JavaScript.** The frame has an opaque origin and no
   network or disk access, so it cannot reach the dashboard, the extension host or your files. Set
   `bestOfN.preview.mode` to `source` or `off` to opt out.
