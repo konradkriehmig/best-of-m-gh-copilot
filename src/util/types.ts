@@ -68,6 +68,8 @@ export interface VariantPreview {
   html?: string;
   /** Assets that could not be resolved, so an unstyled preview can say why. */
   missingAssets?: string[];
+  /** Something worth knowing about the file itself, such as a name that lies about its format. */
+  note?: string;
   truncated?: boolean;
   language?: string;
 }

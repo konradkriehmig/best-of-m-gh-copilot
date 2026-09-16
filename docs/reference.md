@@ -84,6 +84,16 @@ answer with an SVG that *points at* it, which is a reasonable answer that draws 
 anywhere the file cannot be fetched. Inlining it means the card shows what the SVG actually
 produces rather than an empty frame.
 
+**The file's bytes decide its type, not its name.** Agents write text, so a model told to "make
+`image.png` a clean icon" frequently answers with SVG markup saved under the `.png` name — six of
+thirteen variants did exactly that in one run here. Trusting the extension would produce
+`data:image/png` wrapped around SVG source, which every browser draws as a broken-image icon, so
+each preview is identified by its magic number instead and the card says when the name disagrees:
+*"Contains SVG despite the .png name, so a viewer expecting a PNG may reject it."* That note is
+worth reading — the picture may be exactly what you asked for while the file is still unusable to
+anything that goes by the extension. A file named like an image that turns out to be neither an
+image nor markup falls back to a source view, or to no preview at all if it is binary noise.
+
 Rendered **HTML** previews do execute model-written JavaScript. The page is inlined into a
 self-contained document and rendered from `srcdoc` in a frame sandboxed with `allow-scripts`
 **only** — no `allow-same-origin` — so it has an opaque origin and cannot reach the dashboard, the

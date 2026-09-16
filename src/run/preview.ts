@@ -311,7 +311,9 @@ export async function inlineSvgImages(
       missing.push(href);
       continue;
     }
-    const dataUri = `data:${mime};base64,${bytes.toString('base64')}`;
+    // The referenced file gets the same treatment as the preview file itself: its own
+    // bytes decide its type, not the name the SVG happens to use for it.
+    const dataUri = `data:${sniffImageMime(bytes) ?? mime};base64,${bytes.toString('base64')}`;
     const inlined = tag.replace(
       /((?:xlink:)?href\s*=\s*["'])([^"']+)(["'])/gi,
       (whole, open: string, value: string, close: string) =>
@@ -325,6 +327,77 @@ export async function inlineSvgImages(
 
 function escapeAttribute(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/** Human-readable names for the note shown when a file's name lies about its format. */
+const MIME_LABELS: Record<string, string> = {
+  'image/svg+xml': 'SVG',
+  'image/png': 'PNG',
+  'image/jpeg': 'JPEG',
+  'image/gif': 'GIF',
+  'image/webp': 'WebP',
+  'image/avif': 'AVIF',
+  'image/bmp': 'BMP',
+  'image/x-icon': 'icon',
+};
+
+function ascii(bytes: Buffer, start: number, end: number): string {
+  return bytes.subarray(start, end).toString('latin1');
+}
+
+/**
+ * An SVG document, whatever it is called. The root element has to be `<svg>`, so an HTML
+ * page that merely contains one is not mistaken for an image; an XML declaration, DOCTYPE
+ * or comment in front of it is skipped, as is a byte-order mark.
+ */
+function looksLikeSvg(bytes: Buffer): boolean {
+  let head = bytes.subarray(0, 4096).toString('utf8').replace(/^\uFEFF/, '').trimStart();
+  for (;;) {
+    const next = head
+      .replace(/^<\?[\s\S]*?\?>\s*/, '')
+      .replace(/^<!--[\s\S]*?-->\s*/, '')
+      .replace(/^<!DOCTYPE[^>]*>\s*/i, '');
+    if (next === head) {
+      return /^<svg[\s/>]/i.test(head);
+    }
+    head = next;
+  }
+}
+
+/**
+ * Identify an image by its contents rather than its name.
+ *
+ * Necessary because the agents can only write text. Told to "make image.png a clean icon" a
+ * model cannot produce PNG pixels, so it writes SVG markup and leaves the name alone — a
+ * file called `.png` that is really SVG. Trusting the extension hands the webview
+ * `data:image/png` wrapped around SVG source, which renders as a broken-image icon.
+ *
+ * Returns nothing when the bytes are not an image at all, so the caller can fall back to
+ * showing the file as text instead of framing something that will never draw.
+ */
+export function sniffImageMime(bytes: Buffer): string | undefined {
+  if (bytes.length >= 8 && ascii(bytes, 1, 4) === 'PNG' && bytes[0] === 0x89) {
+    return 'image/png';
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (bytes.length >= 6 && /^GIF8[79]a$/.test(ascii(bytes, 0, 6))) {
+    return 'image/gif';
+  }
+  if (bytes.length >= 12 && ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 12) === 'WEBP') {
+    return 'image/webp';
+  }
+  if (bytes.length >= 12 && ascii(bytes, 4, 8) === 'ftyp' && /^avi[fs]$/.test(ascii(bytes, 8, 12))) {
+    return 'image/avif';
+  }
+  if (bytes.length >= 2 && ascii(bytes, 0, 2) === 'BM') {
+    return 'image/bmp';
+  }
+  if (bytes.length >= 4 && bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 1 && bytes[3] === 0) {
+    return 'image/x-icon';
+  }
+  return looksLikeSvg(bytes) ? 'image/svg+xml' : undefined;
 }
 
 /**
@@ -358,26 +431,43 @@ function imageDocument(dataUri: string, alt: string): string {
   ].join('');
 }
 
+/** Says so when the extension disagrees with the bytes, because that is worth knowing. */
+function formatNote(file: string, mime: string): string | undefined {
+  const declared = IMAGE_MIME[extensionOf(file)];
+  if (!declared || declared === mime) {
+    return undefined;
+  }
+  const actual = MIME_LABELS[mime] || mime;
+  const claimed = MIME_LABELS[declared] || declared;
+  return `Contains ${actual} despite the ${extensionOf(file)} name, so anything expecting ${claimed} will not read it.`;
+}
+
 /**
  * Build the preview for an image result. SVG keeps its source, so the markup is still one
- * click away; a bitmap has none to show.
+ * click away; a bitmap has none to show. Returns nothing when the file is not an image at
+ * all, leaving the caller to show it as text.
  */
 async function buildImagePreview(
   file: string,
   absolute: string,
-  extension: string,
   worktreePath: string,
   repoRoot?: string,
 ): Promise<VariantPreview | undefined> {
-  const mime = IMAGE_MIME[extension];
+  let bytes: Buffer;
+  try {
+    bytes = await fs.readFile(absolute);
+  } catch {
+    return undefined;
+  }
 
-  if (extension === '.svg') {
-    let source: string;
-    try {
-      source = await fs.readFile(absolute, 'utf8');
-    } catch {
-      return undefined;
-    }
+  const mime = sniffImageMime(bytes);
+  if (!mime) {
+    return undefined;
+  }
+  const note = formatNote(file, mime);
+
+  if (mime === 'image/svg+xml') {
+    const source = bytes.toString('utf8');
     const inlined = await inlineSvgImages(source, path.dirname(absolute), worktreePath, repoRoot);
     const document = imageDocument(
       `data:${mime};base64,${Buffer.from(inlined.svg, 'utf8').toString('base64')}`,
@@ -391,17 +481,12 @@ async function buildImagePreview(
       code: truncated ? source.slice(0, MAX_CODE_CHARS) : source,
       html: document.length > MAX_IMAGE_CHARS ? undefined : document,
       missingAssets: inlined.missing.length > 0 ? inlined.missing : undefined,
+      note,
       truncated,
-      language: LANGUAGES[extension],
+      language: LANGUAGES['.svg'],
     };
   }
 
-  let bytes: Buffer;
-  try {
-    bytes = await fs.readFile(absolute);
-  } catch {
-    return undefined;
-  }
   const document =
     bytes.byteLength > MAX_IMAGE_BYTES
       ? undefined
@@ -411,6 +496,7 @@ async function buildImagePreview(
     kind: 'image',
     path: absolute,
     html: document,
+    note,
     truncated: false,
   };
 }
@@ -470,6 +556,16 @@ export function choosePreviewFile(files: string[]): string | undefined {
   return undefined;
 }
 
+/** A NUL byte near the start is the cheapest reliable sign that a file is not text. */
+async function looksLikeText(target: string): Promise<boolean> {
+  try {
+    const bytes = await fs.readFile(target);
+    return !bytes.subarray(0, 4096).includes(0);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Build the preview payload for a variant. HTML is inlined into a self-contained document
  * so it can be rendered in a sandboxed frame, an image is base64'd into one, and anything
@@ -490,7 +586,15 @@ export async function buildPreview(
   const language = LANGUAGES[extension];
 
   if (IMAGE_MIME[extension]) {
-    return buildImagePreview(file, absolute, extension, worktreePath, repoRoot);
+    const image = await buildImagePreview(file, absolute, worktreePath, repoRoot);
+    if (image) {
+      return image;
+    }
+    // Named like an image but not one. Show whatever text it holds, unless it is binary
+    // noise -- a corrupt bitmap decoded as UTF-8 is worse than no preview.
+    if (!(await looksLikeText(absolute))) {
+      return undefined;
+    }
   }
 
   let source: string;

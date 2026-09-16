@@ -2,7 +2,7 @@
   "name": "best-of-m",
   "displayName": "Best of M",
   "description": "Fire one prompt at several GitHub Copilot models at once, each in its own git worktree, then compare the results and keep the best.",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "publisher": "konradkriehmig",
   "license": "MIT",
   "private": true,

@@ -2,7 +2,39 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { buildPreview, choosePreviewFile, inlineAssets, inlineSvgImages } from './preview';
+import {
+  buildPreview,
+  choosePreviewFile,
+  inlineAssets,
+  inlineSvgImages,
+  sniffImageMime,
+} from './preview';
+
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+describe('sniffImageMime', () => {
+  it('identifies the formats by their magic numbers', () => {
+    expect(sniffImageMime(PNG_HEADER)).toBe('image/png');
+    expect(sniffImageMime(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg');
+    expect(sniffImageMime(Buffer.from('GIF89a....', 'latin1'))).toBe('image/gif');
+    expect(sniffImageMime(Buffer.from('RIFF????WEBPVP8 ', 'latin1'))).toBe('image/webp');
+    expect(sniffImageMime(Buffer.from('????ftypavif....', 'latin1'))).toBe('image/avif');
+    expect(sniffImageMime(Buffer.from('BM????', 'latin1'))).toBe('image/bmp');
+    expect(sniffImageMime(Buffer.from([0, 0, 1, 0, 1, 0]))).toBe('image/x-icon');
+  });
+
+  it('recognises SVG however it is introduced', () => {
+    expect(sniffImageMime(Buffer.from('<svg xmlns="x"></svg>'))).toBe('image/svg+xml');
+    expect(sniffImageMime(Buffer.from('<?xml version="1.0"?>\n<svg></svg>'))).toBe('image/svg+xml');
+    expect(sniffImageMime(Buffer.from('\uFEFF  \n<!-- hi -->\n<SVG/>'))).toBe('image/svg+xml');
+  });
+
+  it('does not mistake other text for an image', () => {
+    expect(sniffImageMime(Buffer.from('print("hi")'))).toBeUndefined();
+    expect(sniffImageMime(Buffer.from('<html><svg></svg></html>'))).toBeUndefined();
+    expect(sniffImageMime(Buffer.from([]))).toBeUndefined();
+  });
+});
 
 describe('choosePreviewFile', () => {
   it('prefers HTML over source, because rendered output is what we compare', () => {
@@ -423,17 +455,20 @@ describe('buildPreview', () => {
   });
 
   it('renders a bitmap result, which has no source to show', async () => {
-    await fs.writeFile(path.join(root, 'logo.png'), Buffer.from([1, 2, 3]));
+    await fs.writeFile(path.join(root, 'logo.png'), Buffer.concat([PNG_HEADER, Buffer.from([1, 2, 3])]));
 
     const preview = await buildPreview(root, ['logo.png']);
 
     expect(preview?.kind).toBe('image');
-    expect(preview?.html).toContain('data:image/png;base64,AQID');
+    expect(preview?.html).toContain('data:image/png;base64,');
     expect(preview?.code).toBeUndefined();
   });
 
   it('skips the frame for an image too large to inline, rather than the card', async () => {
-    await fs.writeFile(path.join(root, 'huge.png'), Buffer.alloc(800_000, 1));
+    await fs.writeFile(
+      path.join(root, 'huge.png'),
+      Buffer.concat([PNG_HEADER, Buffer.alloc(800_000, 1)]),
+    );
 
     const preview = await buildPreview(root, ['huge.png']);
 
@@ -443,5 +478,50 @@ describe('buildPreview', () => {
 
   it('returns nothing when an image cannot be read', async () => {
     expect(await buildPreview(root, ['gone.png'])).toBeUndefined();
+  });
+
+  // The agents can only write text, so told to "make image.png a clean icon" a model
+  // writes SVG and keeps the name. Trusting the extension produced a broken-image icon.
+  it('renders SVG saved under a .png name, and says the name lies', async () => {
+    await fs.writeFile(path.join(root, 'image.png'), '<svg xmlns="x"><circle r="4"/></svg>', 'utf8');
+
+    const preview = await buildPreview(root, ['image.png']);
+
+    expect(preview?.kind).toBe('image');
+    expect(preview?.html).toContain('data:image/svg+xml;base64,');
+    expect(preview?.html).not.toContain('data:image/png');
+    expect(preview?.code).toContain('<circle r="4"/>');
+    expect(preview?.note).toContain('Contains SVG despite the .png name');
+  });
+
+  it('renders a PNG saved under a .svg name', async () => {
+    await fs.writeFile(path.join(root, 'logo.svg'), Buffer.concat([PNG_HEADER, Buffer.from([7])]));
+
+    const preview = await buildPreview(root, ['logo.svg']);
+
+    expect(preview?.html).toContain('data:image/png;base64,');
+    expect(preview?.code).toBeUndefined();
+    expect(preview?.note).toContain('Contains PNG despite the .svg name');
+  });
+
+  it('says nothing when the name and the bytes agree', async () => {
+    await fs.writeFile(path.join(root, 'logo.png'), Buffer.concat([PNG_HEADER, Buffer.from([7])]));
+
+    expect((await buildPreview(root, ['logo.png']))?.note).toBeUndefined();
+  });
+
+  it('falls back to source for a text file wearing an image name', async () => {
+    await fs.writeFile(path.join(root, 'icon.png'), 'print("not an image")\n', 'utf8');
+
+    const preview = await buildPreview(root, ['icon.png']);
+
+    expect(preview?.kind).toBe('code');
+    expect(preview?.code).toBe('print("not an image")\n');
+  });
+
+  it('shows nothing rather than mojibake for binary that is not an image', async () => {
+    await fs.writeFile(path.join(root, 'blob.png'), Buffer.from([0x42, 0x00, 0x99, 0x01]));
+
+    expect(await buildPreview(root, ['blob.png'])).toBeUndefined();
   });
 });

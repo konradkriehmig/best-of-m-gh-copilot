@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.0
+
+- Preview types are detected from the file's bytes rather than its name. Agents can only write text,
+  so a model told to turn `image.png` into an icon often writes SVG markup and keeps the `.png`
+  name — six of thirteen variants did in one run. The extension previously built a
+  `data:image/png` URI around that SVG source, which browsers draw as a broken-image icon; the
+  magic number now decides, and the card notes that the name disagrees with the contents.
+- A file named like an image that is not one degrades to a source view instead of a broken frame,
+  and is dropped from the preview entirely if it is binary noise.
+- The bitmap an SVG references is sniffed the same way, so a mislabelled asset inlines correctly too.
+
 ## 0.12.0
 
 - Image results are previewed. A run that produces an SVG, PNG, JPEG, GIF, WebP or AVIF now draws it

@@ -191,6 +191,11 @@
       wrapper.appendChild(el('div', 'preview-note', 'Nothing to preview.'));
     }
 
+    // A name that lies about the format decides which variant you keep, so say it.
+    if (preview.note) {
+      wrapper.appendChild(el('div', 'preview-note', preview.note));
+    }
+
     // An unstyled page otherwise looks like a broken renderer. Say what is missing.
     if (preview.missingAssets && preview.missingAssets.length > 0) {
       wrapper.appendChild(el(
