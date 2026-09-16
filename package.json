@@ -6,6 +6,19 @@
   "publisher": "konradkriehmig",
   "license": "MIT",
   "private": true,
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0d1117",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/konradkriehmig/best-of-m-gh-copilot.git"
+  },
+  "homepage": "https://github.com/konradkriehmig/best-of-m-gh-copilot#readme",
+  "bugs": {
+    "url": "https://github.com/konradkriehmig/best-of-m-gh-copilot/issues"
+  },
   "engines": {
     "vscode": "^1.95.0",
     "node": ">=20"
