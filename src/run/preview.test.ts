@@ -50,7 +50,7 @@ describe('inlineAssets', () => {
     await fs.writeFile(path.join(root, 'common.css'), 'body{background:#000}', 'utf8');
     const html = '<html><head><link rel="stylesheet" href="common.css"></head><body></body></html>';
 
-    const out = await inlineAssets(html, root, root);
+    const out = (await inlineAssets(html, root, root)).html;
 
     expect(out).toContain('<style>');
     expect(out).toContain('body{background:#000}');
@@ -61,7 +61,7 @@ describe('inlineAssets', () => {
     await fs.writeFile(path.join(root, 'app.js'), 'console.log(1)', 'utf8');
     const html = '<html><body><script src="app.js"></script></body></html>';
 
-    const out = await inlineAssets(html, root, root);
+    const out = (await inlineAssets(html, root, root)).html;
 
     expect(out).toContain('console.log(1)');
     expect(out).not.toContain('src="app.js"');
@@ -70,13 +70,13 @@ describe('inlineAssets', () => {
   it('leaves remote URLs alone rather than fetching them', async () => {
     const html = '<link rel="stylesheet" href="https://cdn.example.com/a.css">';
 
-    expect(await inlineAssets(html, root, root)).toBe(html);
+    expect((await inlineAssets(html, root, root)).html).toBe(html);
   });
 
   it('leaves a missing asset untouched instead of failing the preview', async () => {
     const html = '<link rel="stylesheet" href="nope.css">';
 
-    expect(await inlineAssets(html, root, root)).toBe(html);
+    expect((await inlineAssets(html, root, root)).html).toBe(html);
   });
 
   it('refuses to inline a file outside the worktree', async () => {
@@ -86,7 +86,7 @@ describe('inlineAssets', () => {
     await fs.mkdir(inner);
     const html = '<link rel="stylesheet" href="../secret.css">';
 
-    const out = await inlineAssets(html, inner, inner);
+    const out = (await inlineAssets(html, inner, inner)).html;
 
     expect(out).toBe(html);
     expect(out).not.toContain('color:red');
@@ -96,7 +96,7 @@ describe('inlineAssets', () => {
     await fs.writeFile(path.join(root, 'a.js'), 'var s = "</script>";', 'utf8');
     const html = '<script src="a.js"></script>';
 
-    const out = await inlineAssets(html, root, root);
+    const out = (await inlineAssets(html, root, root)).html;
 
     expect(out).not.toContain('"</script>"');
     expect(out).toContain('<\\/script>');
@@ -106,7 +106,91 @@ describe('inlineAssets', () => {
     await fs.writeFile(path.join(root, 'icon.png'), 'x', 'utf8');
     const html = '<link rel="icon" href="icon.png">';
 
-    expect(await inlineAssets(html, root, root)).toBe(html);
+    expect((await inlineAssets(html, root, root)).html).toBe(html);
+  });
+
+  it('reports what it could not resolve, so an unstyled page can say why', async () => {
+    const html = '<link rel="stylesheet" href="nope.css"><script src="gone.js"></script>';
+
+    const out = await inlineAssets(html, root, root);
+
+    expect(out.missing).toEqual(['nope.css', 'gone.js']);
+  });
+
+  // A worktree is not where the repo is, so a correct reference such as
+  // `../shared/common.css` resolves to nothing under `.best-of-n`. The reference is not
+  // wrong, its base is -- which is what made two variants render unstyled.
+  it('resolves an asset that sits outside the repo, relative to the repo', async () => {
+    const assets = path.join(root, 'assets');
+    const repo = path.join(root, 'repo');
+    const worktree = path.join(root, 'wt', 'run', 'variant');
+    await fs.mkdir(assets, { recursive: true });
+    await fs.mkdir(repo, { recursive: true });
+    await fs.mkdir(worktree, { recursive: true });
+    await fs.writeFile(path.join(assets, 'common.css'), 'body{background:#000}', 'utf8');
+    const html = '<link rel="stylesheet" href="../assets/common.css">';
+
+    const out = await inlineAssets(html, worktree, worktree, repo);
+
+    expect(out.html).toContain('body{background:#000}');
+    expect(out.html).not.toContain('<link');
+    expect(out.missing).toEqual([]);
+  });
+
+  it('mirrors the page position in the worktree onto the repo', async () => {
+    const repo = path.join(root, 'repo');
+    const worktree = path.join(root, 'wt');
+    await fs.mkdir(path.join(repo, 'assets'), { recursive: true });
+    await fs.mkdir(path.join(worktree, 'pages'), { recursive: true });
+    await fs.writeFile(path.join(repo, 'assets', 'a.css'), 'p{color:red}', 'utf8');
+    const html = '<link rel="stylesheet" href="../assets/a.css">';
+
+    const out = await inlineAssets(html, path.join(worktree, 'pages'), worktree, repo);
+
+    expect(out.html).toContain('p{color:red}');
+  });
+
+  it('prefers the worktree copy over the repo copy', async () => {
+    const repo = path.join(root, 'repo');
+    const worktree = path.join(root, 'wt');
+    await fs.mkdir(repo, { recursive: true });
+    await fs.mkdir(worktree, { recursive: true });
+    await fs.writeFile(path.join(repo, 'a.css'), 'p{color:red}', 'utf8');
+    await fs.writeFile(path.join(worktree, 'a.css'), 'p{color:lime}', 'utf8');
+    const html = '<link rel="stylesheet" href="a.css">';
+
+    const out = await inlineAssets(html, worktree, worktree, repo);
+
+    expect(out.html).toContain('p{color:lime}');
+    expect(out.html).not.toContain('color:red');
+  });
+
+  // The repo fallback deliberately reaches outside the repo, as a browser would, so the
+  // extension is what keeps it to assets.
+  it('will not pull an arbitrary file in through the repo fallback', async () => {
+    const repo = path.join(root, 'repo');
+    const worktree = path.join(root, 'wt');
+    await fs.mkdir(repo, { recursive: true });
+    await fs.mkdir(worktree, { recursive: true });
+    await fs.writeFile(path.join(root, 'id_rsa'), 'PRIVATE KEY', 'utf8');
+    const html = '<link rel="stylesheet" href="../id_rsa">';
+
+    const out = await inlineAssets(html, worktree, worktree, repo);
+
+    expect(out.html).toBe(html);
+    expect(out.html).not.toContain('PRIVATE KEY');
+    expect(out.missing).toEqual(['../id_rsa']);
+  });
+
+  it('still refuses the repo fallback when no repo is given', async () => {
+    const repo = path.join(root, 'repo');
+    const worktree = path.join(root, 'wt');
+    await fs.mkdir(repo, { recursive: true });
+    await fs.mkdir(worktree, { recursive: true });
+    await fs.writeFile(path.join(root, 'outside.css'), 'p{color:red}', 'utf8');
+    const html = '<link rel="stylesheet" href="../outside.css">';
+
+    expect((await inlineAssets(html, worktree, worktree)).html).toBe(html);
   });
 });
 
@@ -149,11 +233,37 @@ describe('buildPreview', () => {
     expect(preview?.code).toContain('<link rel="stylesheet" href="common.css">');
   });
 
+  it('resolves a shared asset through the repo, not the worktree', async () => {
+    const repo = path.join(root, 'repo');
+    const worktree = path.join(root, 'wt', 'run', 'variant');
+    await fs.mkdir(path.join(root, 'shared'), { recursive: true });
+    await fs.mkdir(repo, { recursive: true });
+    await fs.mkdir(worktree, { recursive: true });
+    await fs.writeFile(path.join(root, 'shared', 'common.css'), 'body{background:#000}', 'utf8');
+    await fs.writeFile(
+      path.join(worktree, 'page.html'),
+      '<link rel="stylesheet" href="../shared/common.css"><h1>hi</h1>',
+      'utf8',
+    );
+
+    const preview = await buildPreview(worktree, ['page.html'], repo);
+
+    expect(preview?.html).toContain('body{background:#000}');
+    expect(preview?.missingAssets).toBeUndefined();
+  });
+
+  it('records an asset it could not resolve', async () => {
+    await fs.writeFile(path.join(root, 'page.html'), '<link rel="stylesheet" href="gone.css">', 'utf8');
+
+    const preview = await buildPreview(root, ['page.html']);
+
+    expect(preview?.missingAssets).toEqual(['gone.css']);
+  });
+
   it('leaves code previews without rendered HTML', async () => {
     await fs.writeFile(path.join(root, 'main.py'), 'print(1)', 'utf8');
 
     const preview = await buildPreview(root, ['main.py']);
-
     expect(preview?.html).toBeUndefined();
   });
 

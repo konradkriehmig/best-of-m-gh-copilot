@@ -53,8 +53,8 @@ export interface JudgeVerdict {
 }
 
 /**
- * What to show under a variant card. HTML is framed live from the worktree rather than
- * inlined, so relative assets such as a shared stylesheet still resolve.
+ * What to show under a variant card. HTML is inlined into a self-contained document, since
+ * the sandboxed frame it renders in has an opaque origin and can fetch nothing itself.
  */
 export interface VariantPreview {
   /** Path relative to the worktree root. */
@@ -66,6 +66,8 @@ export interface VariantPreview {
   code?: string;
   /** Self-contained HTML with local assets inlined, rendered in a sandboxed frame. */
   html?: string;
+  /** Assets that could not be resolved, so an unstyled preview can say why. */
+  missingAssets?: string[];
   truncated?: boolean;
   language?: string;
 }

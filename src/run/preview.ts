@@ -82,19 +82,69 @@ function isLocalHref(href: string): boolean {
   );
 }
 
-async function readSibling(dir: string, root: string, href: string): Promise<string | undefined> {
-  const clean = href.split('?')[0].split('#')[0];
-  const target = path.resolve(dir, clean);
-  // An inlined asset must not be a way to read files outside the worktree.
-  const relative = path.relative(root, target);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    return undefined;
-  }
+/** A shared asset pulled in from the repo is read whole, but not without a ceiling. */
+const MAX_ASSET_CHARS = 200_000;
+
+async function readText(target: string, limit = MAX_ASSET_CHARS): Promise<string | undefined> {
   try {
-    return await fs.readFile(target, 'utf8');
+    const text = await fs.readFile(target, 'utf8');
+    return text.length > limit ? undefined : text;
   } catch {
     return undefined;
   }
+}
+
+export interface InlineResult {
+  html: string;
+  /** Local assets that could not be resolved, so the page will render without them. */
+  missing: string[];
+}
+
+/**
+ * Find an asset the page refers to, first in the worktree and then in the real repository.
+ *
+ * The repository fallback exists because a worktree is not where the repository is. A page
+ * that correctly links `../shared/common.css` resolves that against the repo when opened
+ * normally, but against the worktree's parent — some directory under `.best-of-n` — when
+ * previewed. The reference is not wrong; its base is. So the page's position inside the
+ * worktree is mirrored onto the repo and the same reference is resolved from there, which
+ * reproduces what the file would load if it were opened in place.
+ *
+ * This deliberately reaches outside the repository, exactly as the browser would. It is
+ * bounded by the file extension and a size ceiling, and whatever comes back is only ever
+ * inlined into a frame with an opaque origin and no network access.
+ */
+async function readAsset(
+  dir: string,
+  root: string,
+  href: string,
+  extensions: string[],
+  repoRoot?: string,
+): Promise<string | undefined> {
+  const clean = href.split('?')[0].split('#')[0];
+  const inWorktree = path.resolve(dir, clean);
+
+  const relative = path.relative(root, inWorktree);
+  const contained = relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative);
+  if (contained) {
+    const text = await readText(inWorktree);
+    if (text !== undefined) {
+      return text;
+    }
+  }
+
+  if (!repoRoot) {
+    return undefined;
+  }
+  const relativeDir = path.relative(root, dir);
+  if (relativeDir.startsWith('..') || path.isAbsolute(relativeDir)) {
+    return undefined;
+  }
+  const inRepo = path.resolve(repoRoot, relativeDir, clean);
+  if (inRepo === inWorktree || !extensions.includes(path.extname(inRepo).toLowerCase())) {
+    return undefined;
+  }
+  return readText(inRepo);
 }
 
 /**
@@ -105,9 +155,18 @@ async function readSibling(dir: string, root: string, href: string): Promise<str
  * Anything not inlined here simply will not appear, which is why a generated page that
  * links a shared `common.css` rendered as a blank box. Remote URLs are deliberately left
  * as-is: they are blocked by the frame's policy rather than silently fetched.
+ *
+ * Whatever could not be resolved is reported rather than dropped, so an unstyled preview
+ * says why instead of looking like a broken renderer.
  */
-export async function inlineAssets(html: string, dir: string, root: string): Promise<string> {
+export async function inlineAssets(
+  html: string,
+  dir: string,
+  root: string,
+  repoRoot?: string,
+): Promise<InlineResult> {
   const links = [...html.matchAll(/<link\b[^>]*>/gi)];
+  const missing: string[] = [];
   let result = html;
 
   for (const match of links) {
@@ -119,8 +178,10 @@ export async function inlineAssets(html: string, dir: string, root: string): Pro
     if (!href || !isLocalHref(href)) {
       continue;
     }
-    const css = await readSibling(dir, root, href);
-    if (css !== undefined) {
+    const css = await readAsset(dir, root, href, ['.css'], repoRoot);
+    if (css === undefined) {
+      missing.push(href);
+    } else {
       result = result.replace(tag, `<style>\n${css}\n</style>`);
     }
   }
@@ -131,14 +192,16 @@ export async function inlineAssets(html: string, dir: string, root: string): Pro
     if (!isLocalHref(href)) {
       continue;
     }
-    const js = await readSibling(dir, root, href);
-    if (js !== undefined) {
+    const js = await readAsset(dir, root, href, ['.js', '.mjs', '.cjs'], repoRoot);
+    if (js === undefined) {
+      missing.push(href);
+    } else {
       // Any literal </script> inside the file would end the tag early.
       result = result.replace(match[0], `<script>\n${js.replace(/<\/script>/gi, '<\\/script>')}\n</script>`);
     }
   }
 
-  return result;
+  return { html: result, missing };
 }
 
 /**
@@ -195,6 +258,7 @@ export function choosePreviewFile(files: string[]): string | undefined {
 export async function buildPreview(
   worktreePath: string,
   files: string[],
+  repoRoot?: string,
 ): Promise<VariantPreview | undefined> {
   const file = choosePreviewFile(files);
   if (!file) {
@@ -218,9 +282,11 @@ export async function buildPreview(
   const isHtml = HTML_EXTENSIONS.has(extension);
 
   let html: string | undefined;
+  let missingAssets: string[] | undefined;
   if (isHtml) {
-    const inlined = await inlineAssets(source, path.dirname(absolute), worktreePath);
-    html = inlined.length > MAX_HTML_CHARS ? undefined : inlined;
+    const inlined = await inlineAssets(source, path.dirname(absolute), worktreePath, repoRoot);
+    html = inlined.html.length > MAX_HTML_CHARS ? undefined : inlined.html;
+    missingAssets = inlined.missing.length > 0 ? inlined.missing : undefined;
   }
 
   return {
@@ -229,6 +295,7 @@ export async function buildPreview(
     path: absolute,
     code,
     html,
+    missingAssets,
     truncated,
     language,
   };

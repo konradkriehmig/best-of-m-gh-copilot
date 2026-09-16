@@ -80,6 +80,13 @@ inlined for it, because a frame with an opaque origin cannot fetch them; remote 
 and are blocked. If you would rather never execute it, set `bestOfN.preview.mode` to `source`, or
 `off` to hide previews entirely.
 
+An asset is looked for in the worktree first, then at the same position relative to your **repo**.
+That second step matters: a worktree does not sit where the repo sits, so a page that correctly
+links something like `../shared/common.css` would otherwise resolve it to nothing under
+`.best-of-n` and render unstyled. Resolving from the repo reproduces what the page loads when it is
+opened in place. Anything still unresolved is named under the preview, so an unstyled page says why
+instead of looking like a broken renderer.
+
 ### From the chat window
 
 In **Agent mode**, reference the tool with `#`:

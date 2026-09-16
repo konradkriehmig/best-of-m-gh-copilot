@@ -247,7 +247,7 @@ export class RunController {
         await commitVariantWork(variant.worktreePath, `Best of N: ${variant.label}`);
         variant.diff = await diffStat(this.run.repoRoot, this.run.baseRef, variant.branch);
         this.diffs.set(variant.id, await diffText(this.run.repoRoot, this.run.baseRef, variant.branch));
-        variant.preview = await buildPreview(variant.worktreePath, variant.diff.files);
+        variant.preview = await buildPreview(variant.worktreePath, variant.diff.files, this.run.repoRoot);
       } catch (err) {
         log().warn(`Could not capture changes for ${variant.label}: ${String(err)}`);
       }

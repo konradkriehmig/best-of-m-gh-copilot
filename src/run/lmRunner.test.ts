@@ -4,11 +4,13 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { VariantState } from '../util/types';
+import { runAllLm } from './lmRunner';
 
 /** Agents started, and a way to let each one finish on demand. */
 const started: string[] = [];
 const finishers = new Map<string, () => void>();
 
+// Hoisted above the import of the module under test, so the runner sees the stub.
 vi.mock('./lmAgent', () => ({
   selectModel: async (id: string) => ({ id, vendor: 'copilot', name: id }),
   runLmAgent: async (
@@ -27,9 +29,6 @@ vi.mock('./lmAgent', () => ({
     });
   },
 }));
-
-// Imported after the mock so the runner picks up the stubbed agent.
-const { runAllLm } = await import('./lmRunner');
 
 /** A cancellation source with the same shape as the one the extension host provides. */
 function source() {
@@ -109,7 +108,7 @@ describe('runAllLm cancellation', () => {
       onUpdate: noop,
       onLog: noop,
       token: run.token,
-      tokenFor: (v) => sources[v.id as 'a' | 'b'].token,
+      tokenFor: (v: VariantState) => sources[v.id as 'a' | 'b'].token,
     });
 
     await settle();
@@ -132,7 +131,7 @@ describe('runAllLm cancellation', () => {
       onUpdate: noop,
       onLog: noop,
       token: run.token,
-      tokenFor: (v) => sources[v.id as 'a' | 'b'].token,
+      tokenFor: (v: VariantState) => sources[v.id as 'a' | 'b'].token,
     });
 
     await settle();

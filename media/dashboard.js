@@ -180,6 +180,16 @@
       wrapper.appendChild(el('div', 'preview-note', 'Nothing to preview.'));
     }
 
+    // An unstyled page otherwise looks like a broken renderer. Say what is missing.
+    if (preview.missingAssets && preview.missingAssets.length > 0) {
+      wrapper.appendChild(el(
+        'div',
+        'preview-note',
+        'Could not resolve ' + preview.missingAssets.join(', ') +
+          ' - the page renders without it, here and anywhere else it is opened.',
+      ));
+    }
+
     return wrapper;
   }
 
