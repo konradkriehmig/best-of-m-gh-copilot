@@ -59,10 +59,10 @@ export interface JudgeVerdict {
 export interface VariantPreview {
   /** Path relative to the worktree root. */
   file: string;
-  kind: 'html' | 'code';
+  kind: 'html' | 'code' | 'image';
   /** Absolute path, used by "Open file". */
   path: string;
-  /** Populated for both kinds, so HTML can offer a source view too. */
+  /** Text of the file. Absent for raster images, which have no source to show. */
   code?: string;
   /** Self-contained HTML with local assets inlined, rendered in a sandboxed frame. */
   html?: string;

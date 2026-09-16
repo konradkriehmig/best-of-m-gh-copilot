@@ -66,26 +66,39 @@ Each finished card shows a preview of what the variant actually produced, under 
 
 - **HTML** is rendered live in a sandboxed frame, so you can compare the real thing side by side
   instead of reading three descriptions of it. Toggle between **Rendered** and **Source**.
+- **Images** — SVG, PNG, JPEG, GIF, WebP, AVIF — are drawn, on a checkerboard so a transparent
+  background is visible rather than indistinguishable from a matching opaque one. An SVG keeps its
+  **Source** toggle; a bitmap has no source to show.
 - **Anything else** — Python, TypeScript, Rust and so on — is shown as source.
 
 The file is picked from the variant's changed files: an HTML entry point wins, preferring `index`,
-then the shallowest path; otherwise the most interesting source file. **Open file** opens the real
-file in an editor.
+then the shallowest path; then an image, vector before bitmap; otherwise the most interesting source
+file. An image outranks source because a picture of the result beats the markup that draws it.
+**Open file** opens the real file in an editor.
 
-Rendered previews execute model-written JavaScript. The page is inlined into a self-contained
-document and rendered from `srcdoc` in a frame sandboxed with `allow-scripts` **only** — no
-`allow-same-origin` — so it has an opaque origin and cannot reach the dashboard, the extension host,
-your editor, the network or anything on disk. Local stylesheets and scripts the page references are
-inlined for it, because a frame with an opaque origin cannot fetch them; remote URLs are left alone
-and are blocked. If you would rather never execute it, set `bestOfM.preview.mode` to `source`, or
-`off` to hide previews entirely.
+Images are the one preview that cannot execute anything. The file is base64'd into an `<img>` tag,
+which makes a browser render SVG in secure static mode — no scripts, no external fetches — and the
+frame is given an empty `sandbox`, so it has no privileges at all. This is why an SVG that
+references a bitmap has that bitmap inlined first: a model asked to clean up `image.png` will often
+answer with an SVG that *points at* it, which is a reasonable answer that draws as an empty box
+anywhere the file cannot be fetched. Inlining it means the card shows what the SVG actually
+produces rather than an empty frame.
+
+Rendered **HTML** previews do execute model-written JavaScript. The page is inlined into a
+self-contained document and rendered from `srcdoc` in a frame sandboxed with `allow-scripts`
+**only** — no `allow-same-origin` — so it has an opaque origin and cannot reach the dashboard, the
+extension host, your editor, the network or anything on disk. Local stylesheets and scripts the page
+references are inlined for it, because a frame with an opaque origin cannot fetch them; remote URLs
+are left alone and are blocked. If you would rather never execute it, set `bestOfM.preview.mode` to
+`source`, or `off` to hide previews entirely. A bitmap keeps rendering in `source` mode, because it
+cannot execute and has no source to show instead.
 
 An asset is looked for in the worktree first, then at the same position relative to your **repo**.
 That second step matters: a worktree does not sit where the repo sits, so a page that correctly
 links something like `../shared/common.css` would otherwise resolve it to nothing under
 `.best-of-m` and render unstyled. Resolving from the repo reproduces what the page loads when it is
-opened in place. Anything still unresolved is named under the preview, so an unstyled page says why
-instead of looking like a broken renderer.
+opened in place. The same search finds the bitmaps an SVG points at. Anything still unresolved is
+named under the preview, so an unstyled page says why instead of looking like a broken renderer.
 
 Once the judge has run, its verdict for each variant sits at the **bottom of the card**, under the
 preview and the buttons. It is commentary on a result you have already looked at, so it reads last
@@ -183,9 +196,9 @@ Read this before your first run.
 - **M agents cost roughly M times as much** as a single session. The dashboard header states the
   multiple for the whole run, and the chat reply says how many are about to start. Nothing asks you
   to confirm, so the number of variants you pick is the number that starts.
-- **Rendered previews execute model-written JavaScript.** The frame has an opaque origin and no
-  network or disk access, so it cannot reach the dashboard, the extension host or your files. Set
-  `bestOfM.preview.mode` to `source` or `off` to opt out.
+- **Rendered HTML previews execute model-written JavaScript.** The frame has an opaque origin and no
+  network or disk access, so it cannot reach the dashboard, the extension host or your files. Image
+  previews execute nothing at all. Set `bestOfM.preview.mode` to `source` or `off` to opt out.
 
 ## Implementation notes
 

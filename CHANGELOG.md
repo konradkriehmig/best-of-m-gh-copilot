@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.0
+
+- Image results are previewed. A run that produces an SVG, PNG, JPEG, GIF, WebP or AVIF now draws it
+  under the card, on a checkerboard so a transparent background is visible. Previously `.svg` was in
+  neither the renderable nor the source list, so a run whose whole output was a logo showed no
+  preview at all.
+- An SVG that references a bitmap has that bitmap inlined first. Asked to clean up an `image.png`,
+  models routinely answer with an SVG that *points at* it — a reasonable answer that draws as an
+  empty box anywhere the file cannot be fetched, including the preview frame.
+- Images are picked over source, vector before bitmap, and still lose to an HTML entry point.
+- Image previews cannot execute anything: the file is base64'd into an `<img>`, which renders SVG in
+  secure static mode, and the frame is given an empty `sandbox`. A bitmap therefore keeps rendering
+  when `bestOfM.preview.mode` is `source`, since it has nothing to execute and no source to show.
+
 ## 0.11.0
 
 - Renamed to **Best of M**. Command ids, settings (`bestOfM.*`), the chat tool (`#bestofm`) and the

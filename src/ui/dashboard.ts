@@ -104,6 +104,11 @@ export class Dashboard {
       if (!variant.preview || mode === 'rendered') {
         return variant;
       }
+      // A bitmap cannot execute anything and has no source to show instead, so stripping
+      // it would leave an empty card rather than a safer one.
+      if (variant.preview.kind === 'image' && !variant.preview.code) {
+        return variant;
+      }
       return { ...variant, preview: { ...variant.preview, html: undefined } };
     };
 

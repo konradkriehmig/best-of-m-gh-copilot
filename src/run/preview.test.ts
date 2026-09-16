@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { buildPreview, choosePreviewFile, inlineAssets } from './preview';
+import { buildPreview, choosePreviewFile, inlineAssets, inlineSvgImages } from './preview';
 
 describe('choosePreviewFile', () => {
   it('prefers HTML over source, because rendered output is what we compare', () => {
@@ -22,13 +22,112 @@ describe('choosePreviewFile', () => {
     expect(choosePreviewFile(['styles.css', 'app.ts'])).toBe('app.ts');
   });
 
+  it('prefers a rendered image over the source that draws it', () => {
+    expect(choosePreviewFile(['draw.py', 'logo.svg'])).toBe('logo.svg');
+    expect(choosePreviewFile(['logo.png', 'styles.css'])).toBe('logo.png');
+  });
+
+  it('still prefers a page over an image', () => {
+    expect(choosePreviewFile(['logo.svg', 'index.html'])).toBe('index.html');
+  });
+
+  it('prefers the vector over an exported bitmap of the same thing', () => {
+    expect(choosePreviewFile(['logo.png', 'logo.svg'])).toBe('logo.svg');
+  });
+
   it('returns nothing when no file is previewable', () => {
-    expect(choosePreviewFile(['image.png', 'data.bin'])).toBeUndefined();
+    expect(choosePreviewFile(['data.bin', 'notes.txt'])).toBeUndefined();
     expect(choosePreviewFile([])).toBeUndefined();
+  });
+
+  it('returns nothing when there are no previewable files', () => {
+    expect(choosePreviewFile(['data.bin'])).toBeUndefined();
   });
 
   it('is stable for equally ranked files', () => {
     expect(choosePreviewFile(['b.html', 'a.html'])).toBe('a.html');
+  });
+});
+
+describe('inlineSvgImages', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'bon-svg-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  // Asked to clean up a hand-drawn PNG, models routinely answer with an SVG that
+  // references it. That renders as an empty box anywhere the file cannot be fetched,
+  // which includes the preview frame.
+  it('inlines a referenced bitmap so the drawing is not an empty box', async () => {
+    await fs.writeFile(path.join(root, 'image.png'), Buffer.from([1, 2, 3]));
+    const svg = '<svg><image href="image.png" width="128" height="128"/></svg>';
+
+    const out = await inlineSvgImages(svg, root, root);
+
+    expect(out.svg).toContain('data:image/png;base64,AQID');
+    expect(out.svg).not.toContain('href="image.png"');
+    expect(out.missing).toEqual([]);
+  });
+
+  it('handles the older xlink:href spelling', async () => {
+    await fs.writeFile(path.join(root, 'a.png'), Buffer.from([1]));
+    const svg = '<svg><image xlink:href="a.png"/></svg>';
+
+    expect((await inlineSvgImages(svg, root, root)).svg).toContain('data:image/png;base64,');
+  });
+
+  it('inlines every referenced image, not just the first', async () => {
+    await fs.writeFile(path.join(root, 'a.png'), Buffer.from([1]));
+    await fs.writeFile(path.join(root, 'b.png'), Buffer.from([2]));
+    const svg = '<svg><image href="a.png"/><image href="b.png"/></svg>';
+
+    const out = await inlineSvgImages(svg, root, root);
+
+    expect(out.svg).toContain('base64,AQ==');
+    expect(out.svg).toContain('base64,Ag==');
+    expect(out.svg).not.toContain('.png"');
+  });
+
+  it('leaves a remote or already-inlined reference alone', async () => {
+    const svg = '<svg><image href="https://x.test/a.png"/><image href="data:image/png;base64,AQ=="/></svg>';
+
+    const out = await inlineSvgImages(svg, root, root);
+
+    expect(out.svg).toBe(svg);
+    expect(out.missing).toEqual([]);
+  });
+
+  it('reports a reference it could not resolve', async () => {
+    const svg = '<svg><image href="gone.png"/></svg>';
+
+    expect((await inlineSvgImages(svg, root, root)).missing).toEqual(['gone.png']);
+  });
+
+  it('refuses to reach outside the worktree', async () => {
+    await fs.writeFile(path.join(root, 'secret.png'), Buffer.from([9]));
+    const inner = path.join(root, 'wt');
+    await fs.mkdir(inner);
+    const svg = '<svg><image href="../secret.png"/></svg>';
+
+    const out = await inlineSvgImages(svg, inner, inner);
+
+    expect(out.svg).toBe(svg);
+    expect(out.missing).toEqual(['../secret.png']);
+  });
+
+  it('will not pull a non-image in through the reference', async () => {
+    await fs.writeFile(path.join(root, 'id_rsa'), 'PRIVATE KEY', 'utf8');
+    const svg = '<svg><image href="id_rsa"/></svg>';
+
+    const out = await inlineSvgImages(svg, root, root);
+
+    expect(out.svg).not.toContain('PRIVATE KEY');
+    expect(out.missing).toEqual(['id_rsa']);
   });
 });
 
@@ -292,6 +391,57 @@ describe('buildPreview', () => {
   });
 
   it('returns nothing when there are no previewable files', async () => {
-    expect(await buildPreview(root, ['logo.png'])).toBeUndefined();
+    expect(await buildPreview(root, ['data.bin'])).toBeUndefined();
+  });
+
+  // This is the case that showed no preview at all: a run that produces only an SVG.
+  it('renders an SVG result and keeps its markup', async () => {
+    await fs.writeFile(path.join(root, 'logo.svg'), '<svg><circle r="4"/></svg>', 'utf8');
+
+    const preview = await buildPreview(root, ['logo.svg']);
+
+    expect(preview?.kind).toBe('image');
+    expect(preview?.file).toBe('logo.svg');
+    expect(preview?.html).toContain('data:image/svg+xml;base64,');
+    expect(preview?.code).toBe('<svg><circle r="4"/></svg>');
+  });
+
+  it('carries the bitmap an SVG references into the preview', async () => {
+    await fs.writeFile(path.join(root, 'image.png'), Buffer.from([1, 2, 3]));
+    await fs.writeFile(path.join(root, 'logo.svg'), '<svg><image href="image.png"/></svg>', 'utf8');
+
+    const preview = await buildPreview(root, ['logo.svg']);
+    const svg = Buffer.from(
+      (preview?.html ?? '').split('data:image/svg+xml;base64,')[1].split('"')[0],
+      'base64',
+    ).toString('utf8');
+
+    expect(svg).toContain('data:image/png;base64,AQID');
+    expect(preview?.missingAssets).toBeUndefined();
+    // The source view still shows what the model actually wrote.
+    expect(preview?.code).toContain('href="image.png"');
+  });
+
+  it('renders a bitmap result, which has no source to show', async () => {
+    await fs.writeFile(path.join(root, 'logo.png'), Buffer.from([1, 2, 3]));
+
+    const preview = await buildPreview(root, ['logo.png']);
+
+    expect(preview?.kind).toBe('image');
+    expect(preview?.html).toContain('data:image/png;base64,AQID');
+    expect(preview?.code).toBeUndefined();
+  });
+
+  it('skips the frame for an image too large to inline, rather than the card', async () => {
+    await fs.writeFile(path.join(root, 'huge.png'), Buffer.alloc(800_000, 1));
+
+    const preview = await buildPreview(root, ['huge.png']);
+
+    expect(preview?.kind).toBe('image');
+    expect(preview?.html).toBeUndefined();
+  });
+
+  it('returns nothing when an image cannot be read', async () => {
+    expect(await buildPreview(root, ['gone.png'])).toBeUndefined();
   });
 });

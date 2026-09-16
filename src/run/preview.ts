@@ -4,11 +4,28 @@ import { VariantPreview } from '../util/types';
 
 /**
  * Picking what to show under a variant card. Comparing rendered output side by side is
- * the whole point of a best-of-N run on front-end work, so an HTML entry point always
- * wins; otherwise fall back to showing the source the agent actually wrote.
+ * the whole point of a best-of-N run, so anything that can be *shown* wins over anything
+ * that can only be read: an HTML entry point first, then an image, then the source the
+ * agent actually wrote.
  */
 
 const HTML_EXTENSIONS = new Set(['.html', '.htm']);
+
+/** Images are rendered, not read, so they need their media type rather than a language. */
+const IMAGE_MIME: Record<string, string> = {
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon',
+};
+
+/** Ranked so a vector logo beats an exported bitmap of the same thing. */
+const IMAGE_EXTENSIONS = ['.svg', '.png', '.webp', '.avif', '.jpg', '.jpeg', '.gif', '.bmp', '.ico'];
 
 /** Extensions worth previewing as source, best first. */
 const CODE_EXTENSIONS = [
@@ -63,6 +80,7 @@ const LANGUAGES: Record<string, string> = {
   '.md': 'markdown',
   '.html': 'html',
   '.htm': 'html',
+  '.svg': 'xml',
 };
 
 /** Keeps a big generated file from bloating every dashboard message. */
@@ -70,6 +88,16 @@ const MAX_CODE_CHARS = 40_000;
 
 /** A rendered page carries its assets inline, so it needs more room than a source view. */
 const MAX_HTML_CHARS = 400_000;
+
+/**
+ * An image is base64'd into the message, which costs a third more than the file itself.
+ * Generous enough for any logo or diagram, small enough that two dozen variants do not
+ * push megabytes through `postMessage` on every state change.
+ */
+const MAX_IMAGE_BYTES = 750_000;
+
+/** The wrapper document is mostly the data URI, so it gets a matching ceiling. */
+const MAX_IMAGE_CHARS = 1_100_000;
 
 /** Only same-directory-ish relative paths are inlined; remote URLs are left alone. */
 function isLocalHref(href: string): boolean {
@@ -101,7 +129,8 @@ export interface InlineResult {
 }
 
 /**
- * Find an asset the page refers to, first in the worktree and then in the real repository.
+ * Where an asset the page refers to might actually live: the worktree first, then the
+ * real repository.
  *
  * The repository fallback exists because a worktree is not where the repository is. A page
  * that correctly links `../shared/common.css` resolves that against the repo when opened
@@ -110,10 +139,41 @@ export interface InlineResult {
  * worktree is mirrored onto the repo and the same reference is resolved from there, which
  * reproduces what the file would load if it were opened in place.
  *
- * This deliberately reaches outside the repository, exactly as the browser would. It is
+ * That deliberately reaches outside the repository, exactly as the browser would. It is
  * bounded by the file extension and a size ceiling, and whatever comes back is only ever
  * inlined into a frame with an opaque origin and no network access.
  */
+function assetCandidates(
+  dir: string,
+  root: string,
+  href: string,
+  extensions: string[],
+  repoRoot?: string,
+): string[] {
+  const clean = href.split('?')[0].split('#')[0];
+  const candidates: string[] = [];
+  const inWorktree = path.resolve(dir, clean);
+
+  const relative = path.relative(root, inWorktree);
+  const contained = relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative);
+  if (contained) {
+    candidates.push(inWorktree);
+  }
+
+  if (!repoRoot) {
+    return candidates;
+  }
+  const relativeDir = path.relative(root, dir);
+  if (relativeDir.startsWith('..') || path.isAbsolute(relativeDir)) {
+    return candidates;
+  }
+  const inRepo = path.resolve(repoRoot, relativeDir, clean);
+  if (inRepo !== inWorktree && extensions.includes(path.extname(inRepo).toLowerCase())) {
+    candidates.push(inRepo);
+  }
+  return candidates;
+}
+
 async function readAsset(
   dir: string,
   root: string,
@@ -121,30 +181,34 @@ async function readAsset(
   extensions: string[],
   repoRoot?: string,
 ): Promise<string | undefined> {
-  const clean = href.split('?')[0].split('#')[0];
-  const inWorktree = path.resolve(dir, clean);
-
-  const relative = path.relative(root, inWorktree);
-  const contained = relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative);
-  if (contained) {
-    const text = await readText(inWorktree);
+  for (const candidate of assetCandidates(dir, root, href, extensions, repoRoot)) {
+    const text = await readText(candidate);
     if (text !== undefined) {
       return text;
     }
   }
+  return undefined;
+}
 
-  if (!repoRoot) {
-    return undefined;
+/** The same search, for files that are not text and must be base64'd rather than read. */
+async function readAssetBytes(
+  dir: string,
+  root: string,
+  href: string,
+  extensions: string[],
+  repoRoot?: string,
+): Promise<Buffer | undefined> {
+  for (const candidate of assetCandidates(dir, root, href, extensions, repoRoot)) {
+    try {
+      const data = await fs.readFile(candidate);
+      if (data.byteLength <= MAX_IMAGE_BYTES) {
+        return data;
+      }
+    } catch {
+      // Try the next candidate.
+    }
   }
-  const relativeDir = path.relative(root, dir);
-  if (relativeDir.startsWith('..') || path.isAbsolute(relativeDir)) {
-    return undefined;
-  }
-  const inRepo = path.resolve(repoRoot, relativeDir, clean);
-  if (inRepo === inWorktree || !extensions.includes(path.extname(inRepo).toLowerCase())) {
-    return undefined;
-  }
-  return readText(inRepo);
+  return undefined;
 }
 
 /**
@@ -204,6 +268,153 @@ export async function inlineAssets(
   return { html: result, missing };
 }
 
+export interface InlineSvgResult {
+  svg: string;
+  /** Referenced images that could not be resolved, so a half-empty logo can say why. */
+  missing: string[];
+}
+
+/**
+ * Inline the bitmaps an SVG points at.
+ *
+ * This is the same problem the stylesheets had, and it bites harder here. Asked to clean
+ * up a hand-drawn `image.png`, several models produce an SVG that *references* the
+ * original — `<image href="image.png">` with a filter over it — which is a perfectly good
+ * answer that renders as an empty box in any context that cannot fetch it. The preview
+ * frame is exactly such a context, so the referenced file is read and base64'd into the
+ * markup before it ever reaches the webview.
+ */
+export async function inlineSvgImages(
+  svg: string,
+  dir: string,
+  root: string,
+  repoRoot?: string,
+): Promise<InlineSvgResult> {
+  const tags = [...svg.matchAll(/<image\b[^>]*>/gi)];
+  const missing: string[] = [];
+  let result = svg;
+
+  for (const match of tags) {
+    const tag = match[0];
+    // `href` on modern SVG, `xlink:href` on anything older.
+    const href = /(?:xlink:)?href\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1];
+    if (!href || !isLocalHref(href)) {
+      continue;
+    }
+    const mime = IMAGE_MIME[path.extname(href.split('?')[0].split('#')[0]).toLowerCase()];
+    if (!mime) {
+      missing.push(href);
+      continue;
+    }
+    const bytes = await readAssetBytes(dir, root, href, IMAGE_EXTENSIONS, repoRoot);
+    if (bytes === undefined) {
+      missing.push(href);
+      continue;
+    }
+    const dataUri = `data:${mime};base64,${bytes.toString('base64')}`;
+    const inlined = tag.replace(
+      /((?:xlink:)?href\s*=\s*["'])([^"']+)(["'])/gi,
+      (whole, open: string, value: string, close: string) =>
+        isLocalHref(value) ? `${open}${dataUri}${close}` : whole,
+    );
+    result = result.replace(tag, inlined);
+  }
+
+  return { svg: result, missing };
+}
+
+function escapeAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/**
+ * Wrap an image in a page the frame can render.
+ *
+ * Deliberately an `<img>` with a data URI rather than inline SVG markup. Loaded that way a
+ * browser renders SVG in secure static mode: no scripts, no external fetches. So unlike
+ * the HTML preview — which does run whatever the model wrote — an image preview can only
+ * ever draw. It is framed with an empty `sandbox` for the same reason.
+ *
+ * The checkerboard is not decoration: a transparent logo on a flat background is
+ * indistinguishable from one with a matching opaque background, which is precisely the
+ * difference you are comparing variants for.
+ */
+function imageDocument(dataUri: string, alt: string): string {
+  return [
+    '<!doctype html><html><head><meta charset="utf-8"><style>',
+    'html,body{margin:0;height:100%}',
+    'body{display:flex;align-items:center;justify-content:center;background-color:#fff;',
+    'background-image:',
+    'linear-gradient(45deg,#e9e9e9 25%,transparent 25%),',
+    'linear-gradient(-45deg,#e9e9e9 25%,transparent 25%),',
+    'linear-gradient(45deg,transparent 75%,#e9e9e9 75%),',
+    'linear-gradient(-45deg,transparent 75%,#e9e9e9 75%);',
+    'background-size:16px 16px;',
+    'background-position:0 0,0 8px,8px -8px,-8px 0}',
+    'img{max-width:100%;max-height:100%;object-fit:contain}',
+    '</style></head><body>',
+    `<img src="${dataUri}" alt="${escapeAttribute(alt)}">`,
+    '</body></html>',
+  ].join('');
+}
+
+/**
+ * Build the preview for an image result. SVG keeps its source, so the markup is still one
+ * click away; a bitmap has none to show.
+ */
+async function buildImagePreview(
+  file: string,
+  absolute: string,
+  extension: string,
+  worktreePath: string,
+  repoRoot?: string,
+): Promise<VariantPreview | undefined> {
+  const mime = IMAGE_MIME[extension];
+
+  if (extension === '.svg') {
+    let source: string;
+    try {
+      source = await fs.readFile(absolute, 'utf8');
+    } catch {
+      return undefined;
+    }
+    const inlined = await inlineSvgImages(source, path.dirname(absolute), worktreePath, repoRoot);
+    const document = imageDocument(
+      `data:${mime};base64,${Buffer.from(inlined.svg, 'utf8').toString('base64')}`,
+      file,
+    );
+    const truncated = source.length > MAX_CODE_CHARS;
+    return {
+      file,
+      kind: 'image',
+      path: absolute,
+      code: truncated ? source.slice(0, MAX_CODE_CHARS) : source,
+      html: document.length > MAX_IMAGE_CHARS ? undefined : document,
+      missingAssets: inlined.missing.length > 0 ? inlined.missing : undefined,
+      truncated,
+      language: LANGUAGES[extension],
+    };
+  }
+
+  let bytes: Buffer;
+  try {
+    bytes = await fs.readFile(absolute);
+  } catch {
+    return undefined;
+  }
+  const document =
+    bytes.byteLength > MAX_IMAGE_BYTES
+      ? undefined
+      : imageDocument(`data:${mime};base64,${bytes.toString('base64')}`, file);
+  return {
+    file,
+    kind: 'image',
+    path: absolute,
+    html: document,
+    truncated: false,
+  };
+}
+
 /**
  * An entry point is more useful than a fragment, so prefer an obvious index, then the
  * shallowest path, then the shortest name. Ties are broken alphabetically so the choice
@@ -241,6 +452,14 @@ export function choosePreviewFile(files: string[]): string | undefined {
     return pickBest(html);
   }
 
+  // Before source, because a picture of the result beats the markup that draws it.
+  for (const extension of IMAGE_EXTENSIONS) {
+    const matches = usable.filter((file) => extensionOf(file) === extension);
+    if (matches.length > 0) {
+      return pickBest(matches);
+    }
+  }
+
   for (const extension of CODE_EXTENSIONS) {
     const matches = usable.filter((file) => extensionOf(file) === extension);
     if (matches.length > 0) {
@@ -253,7 +472,8 @@ export function choosePreviewFile(files: string[]): string | undefined {
 
 /**
  * Build the preview payload for a variant. HTML is inlined into a self-contained document
- * so it can be rendered in a sandboxed frame; anything else is read in as text.
+ * so it can be rendered in a sandboxed frame, an image is base64'd into one, and anything
+ * else is read in as text.
  */
 export async function buildPreview(
   worktreePath: string,
@@ -268,6 +488,10 @@ export async function buildPreview(
   const extension = extensionOf(file);
   const absolute = path.join(worktreePath, file);
   const language = LANGUAGES[extension];
+
+  if (IMAGE_MIME[extension]) {
+    return buildImagePreview(file, absolute, extension, worktreePath, repoRoot);
+  }
 
   let source: string;
   try {

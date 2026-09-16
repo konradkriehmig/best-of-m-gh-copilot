@@ -128,16 +128,22 @@
     bar.appendChild(el('span', 'preview-file', preview.file));
 
     // Enforced here as well as in the extension: source mode must never execute
-    // generated HTML, whatever the payload happens to contain.
-    const isHtml =
-      preview.kind === 'html' && Boolean(preview.html) && settings.mode === 'rendered';
+    // generated HTML, whatever the payload happens to contain. A bitmap is the one
+    // exception, and only because it cannot execute and has no source to show instead --
+    // suppressing it would hide the result rather than protect anything.
+    const isBitmap = preview.kind === 'image' && !preview.code;
+    const canRender =
+      (preview.kind === 'html' || preview.kind === 'image') &&
+      Boolean(preview.html) &&
+      (settings.mode === 'rendered' || isBitmap);
     // Rendered output is the point of the comparison, so it is the default when we have it.
     const key = variant.id;
     if (showSource[key] === undefined) {
-      showSource[key] = !isHtml;
+      showSource[key] = !canRender;
     }
 
-    if (isHtml) {
+    // A bitmap has no source to switch to, so it gets no switch.
+    if (canRender && preview.code) {
       const toggle = el('div', 'preview-toggle');
       toggle.appendChild(button('Rendered', function () {
         showSource[key] = false;
@@ -157,7 +163,7 @@
     bar.appendChild(open);
     wrapper.appendChild(bar);
 
-    if (isHtml && !showSource[key]) {
+    if (canRender && !showSource[key]) {
       const frame = document.createElement('iframe');
       frame.className = 'preview-frame';
       frame.style.height = settings.height + 'px';
@@ -166,7 +172,10 @@
       // host, or anything on disk. Pointing an iframe at the file's own webview URI does
       // not work -- the resource is served, but a nested frame's scripts never run -- so
       // the page arrives inlined and is rendered from srcdoc instead.
-      frame.setAttribute('sandbox', 'allow-scripts');
+      //
+      // An image is only ever an <img> with a data URI, which has nothing to run, so it
+      // is framed with no privileges at all.
+      frame.setAttribute('sandbox', preview.kind === 'image' ? '' : 'allow-scripts');
       frame.srcdoc = preview.html;
       wrapper.appendChild(frame);
     } else if (preview.code) {
@@ -176,6 +185,8 @@
       if (preview.truncated) {
         wrapper.appendChild(el('div', 'preview-note', 'Truncated. Use "Open file" for the rest.'));
       }
+    } else if (preview.kind === 'image') {
+      wrapper.appendChild(el('div', 'preview-note', 'Image is too large to show here. Use "Open file".'));
     } else {
       wrapper.appendChild(el('div', 'preview-note', 'Nothing to preview.'));
     }
@@ -185,8 +196,9 @@
       wrapper.appendChild(el(
         'div',
         'preview-note',
-        'Could not resolve ' + preview.missingAssets.join(', ') +
-          ' - the page renders without it, here and anywhere else it is opened.',
+        'Could not resolve ' + preview.missingAssets.join(', ') + ' - ' +
+          (preview.kind === 'image' ? 'the image draws without it' : 'the page renders without it') +
+          ', here and anywhere else it is opened.',
       ));
     }
 
