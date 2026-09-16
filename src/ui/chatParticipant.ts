@@ -5,7 +5,7 @@ import { parseFanOut, formatDuration } from '../util/text';
 import { summarizeCheck } from '../score/aggregate';
 import { RankedVariant, RunRecord, VariantState } from '../util/types';
 
-export const PARTICIPANT_ID = 'bestOfN.chat';
+export const PARTICIPANT_ID = 'bestOfM.chat';
 
 export interface ChatRunHost {
   /** Resolves the repository for the active workspace, or reports why it cannot. */
@@ -22,7 +22,7 @@ export interface ChatRunHost {
 }
 
 function config() {
-  return vscode.workspace.getConfiguration('bestOfN');
+  return vscode.workspace.getConfiguration('bestOfM');
 }
 
 /**
@@ -56,8 +56,8 @@ export async function promptForFanOut(): Promise<
   const picked = await vscode.window.showQuickPick(
     models.map((m) => ({ label: m.id, description: m.detail })),
     {
-      title: 'Best of N: models to fan out to',
-      placeHolder: 'Pick the models every @bestofn prompt should run against',
+      title: 'Best of M: models to fan out to',
+      placeHolder: 'Pick the models every @bestofm prompt should run against',
       canPickMany: true,
       ignoreFocusOut: true,
     },
@@ -67,7 +67,7 @@ export async function promptForFanOut(): Promise<
   }
 
   const replicas = await vscode.window.showInputBox({
-    title: 'Best of N: sessions per model',
+    title: 'Best of M: sessions per model',
     prompt: 'How many parallel sessions per selected model?',
     value: picked.length === 1 ? '3' : '1',
     ignoreFocusOut: true,
@@ -149,17 +149,17 @@ function renderResults(
   stream.markdown('\n');
   for (const variant of usable) {
     stream.button({
-      command: 'bestOfN.keepVariant',
+      command: 'bestOfM.keepVariant',
       title: `Keep ${variant.label}`,
       arguments: [variant.id],
     });
     stream.button({
-      command: 'bestOfN.showVariantDiff',
+      command: 'bestOfM.showVariantDiff',
       title: `Diff ${variant.label}`,
       arguments: [variant.id],
     });
   }
-  stream.button({ command: 'bestOfN.showDashboard', title: 'Open dashboard' });
+  stream.button({ command: 'bestOfM.showDashboard', title: 'Open dashboard' });
 }
 
 export function registerChatParticipant(
@@ -171,7 +171,7 @@ export function registerChatParticipant(
       const chosen = await promptForFanOut();
       if (chosen) {
         const summary = chosen.map((c) => `${c.count}x ${c.model}`).join(', ');
-        stream.markdown(`Fan-out set to **${summary}**. Send a prompt with \`@bestofn\` to use it.`);
+        stream.markdown(`Fan-out set to **${summary}**. Send a prompt with \`@bestofm\` to use it.`);
       } else {
         stream.markdown('Fan-out unchanged.');
       }
@@ -183,21 +183,21 @@ export function registerChatParticipant(
       stream.markdown(
         'Give me a task and I will run it across several models at once, each in its own git ' +
           'worktree, then compare the results.\n\n' +
-          'Example: `@bestofn add retry with exponential backoff to the HTTP client`\n\n' +
+          'Example: `@bestofm add retry with exponential backoff to the HTTP client`\n\n' +
           'Use `/models` to choose which models to fan out to.',
       );
       return {};
     }
 
     if (host.isRunning()) {
-      stream.markdown('A Best of N run is already in progress. Wait for it to finish, or cancel it.');
-      stream.button({ command: 'bestOfN.cancelRun', title: 'Cancel the running fan-out' });
+      stream.markdown('A Best of M run is already in progress. Wait for it to finish, or cancel it.');
+      stream.button({ command: 'bestOfM.cancelRun', title: 'Cancel the running fan-out' });
       return {};
     }
 
     const repoRoot = await host.resolveRepoRoot();
     if (!repoRoot) {
-      stream.markdown('Best of N needs an open folder inside a git repository.');
+      stream.markdown('Best of M needs an open folder inside a git repository.');
       return {};
     }
 
@@ -209,7 +209,7 @@ export function registerChatParticipant(
     const total = selection.reduce((sum, entry) => sum + entry.count, 0);
     const breakdown = selection.map((s) => `${s.count}x ${s.model}`).join(', ');
 
-    // N independent agents cost roughly N times a single session, so say so up front
+    // M independent agents cost roughly M times a single session, so say so up front
     // rather than burying it in a setting.
     stream.markdown(
       `Running **${total} parallel sessions** (${breakdown}), each in its own git worktree.\n\n` +

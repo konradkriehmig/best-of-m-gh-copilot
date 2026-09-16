@@ -24,7 +24,7 @@ export async function discoverModels(): Promise<ModelOption[]> {
   const byId = new Map<string, ModelOption>();
 
   const configured = vscode.workspace
-    .getConfiguration('bestOfN')
+    .getConfiguration('bestOfM')
     .get<string[]>('models', [])
     .map((m) => m.trim())
     .filter((m) => m.length > 0);

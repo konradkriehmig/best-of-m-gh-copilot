@@ -3,8 +3,8 @@ import * as vscode from 'vscode';
 import { diffText, fileAtRef } from '../git/diff';
 import { VariantState } from '../util/types';
 
-export const BASE_SCHEME = 'best-of-n-base';
-export const PATCH_SCHEME = 'best-of-n-patch';
+export const BASE_SCHEME = 'best-of-m-base';
+export const PATCH_SCHEME = 'best-of-m-patch';
 
 interface BaseQuery {
   repoRoot: string;

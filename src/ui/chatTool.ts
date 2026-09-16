@@ -5,20 +5,20 @@ import { parseFanOut, formatDuration } from '../util/text';
 import { summarizeCheck } from '../score/aggregate';
 import { RankedVariant, RunRecord } from '../util/types';
 
-export const TOOL_NAME = 'run_best_of_n';
+export const TOOL_NAME = 'run_best_of_m';
 
-export interface BestOfNToolInput {
+export interface BestOfMToolInput {
   prompt?: string;
   models?: string[];
 }
 
 function config() {
-  return vscode.workspace.getConfiguration('bestOfN');
+  return vscode.workspace.getConfiguration('bestOfM');
 }
 
 /** The fan-out set for this invocation: the model's suggestion, else settings, else ask. */
 async function resolveSelection(
-  input: BestOfNToolInput,
+  input: BestOfMToolInput,
 ): Promise<Array<{ model: string; count: number }> | undefined> {
   const requested = parseFanOut(input.models ?? []);
   if (requested.length > 0) {
@@ -79,7 +79,7 @@ function renderResult(run: RunRecord, ranking: RankedVariant[]): string {
     '',
     'The attempts are ranked best first. Nothing has been merged into the working tree.',
     best
-      ? `To take the top result, run the "Best of N: Show Dashboard" command and press "Keep this one" on ${best.label}, ` +
+      ? `To take the top result, run the "Best of M: Show Dashboard" command and press "Keep this one" on ${best.label}, ` +
           `or merge its branch \`${best.branch}\` yourself.`
       : 'No attempt produced any changes, so there is nothing to merge.',
     '',
@@ -93,11 +93,11 @@ function renderResult(run: RunRecord, ranking: RankedVariant[]): string {
  * Exposes the fan-out to agent mode, where tools referenced with `#` replaced the older
  * `@participant` mentions. The tool is long-running by design: it waits for every variant.
  */
-export class BestOfNTool implements vscode.LanguageModelTool<BestOfNToolInput> {
+export class BestOfMTool implements vscode.LanguageModelTool<BestOfMToolInput> {
   constructor(private readonly host: ChatRunHost) {}
 
   async prepareInvocation(
-    options: vscode.LanguageModelToolInvocationPrepareOptions<BestOfNToolInput>,
+    options: vscode.LanguageModelToolInvocationPrepareOptions<BestOfMToolInput>,
   ): Promise<vscode.PreparedToolInvocation> {
     const selection =
       parseFanOut(options.input.models ?? []).length > 0
@@ -126,7 +126,7 @@ export class BestOfNTool implements vscode.LanguageModelTool<BestOfNToolInput> {
   }
 
   async invoke(
-    options: vscode.LanguageModelToolInvocationOptions<BestOfNToolInput>,
+    options: vscode.LanguageModelToolInvocationOptions<BestOfMToolInput>,
     token: vscode.CancellationToken,
   ): Promise<vscode.LanguageModelToolResult> {
     const prompt = (options.input.prompt ?? '').trim();
@@ -137,12 +137,12 @@ export class BestOfNTool implements vscode.LanguageModelTool<BestOfNToolInput> {
     }
 
     if (this.host.isRunning()) {
-      throw new Error('A Best of N run is already in progress. Wait for it to finish, or cancel it.');
+      throw new Error('A Best of M run is already in progress. Wait for it to finish, or cancel it.');
     }
 
     const repoRoot = await this.host.resolveRepoRoot();
     if (!repoRoot) {
-      throw new Error('Best of N needs an open folder inside a git repository.');
+      throw new Error('Best of M needs an open folder inside a git repository.');
     }
 
     const selection = await resolveSelection(options.input);
@@ -154,7 +154,7 @@ export class BestOfNTool implements vscode.LanguageModelTool<BestOfNToolInput> {
     const result = await this.host.execute(plan, repoRoot, () => undefined, token);
 
     if (!result) {
-      throw new Error('The run did not start. Check the "Best of N" output channel for details.');
+      throw new Error('The run did not start. Check the "Best of M" output channel for details.');
     }
     if (token.isCancellationRequested) {
       return new vscode.LanguageModelToolResult([
@@ -169,5 +169,5 @@ export class BestOfNTool implements vscode.LanguageModelTool<BestOfNToolInput> {
 }
 
 export function registerChatTool(host: ChatRunHost): vscode.Disposable {
-  return vscode.lm.registerTool(TOOL_NAME, new BestOfNTool(host));
+  return vscode.lm.registerTool(TOOL_NAME, new BestOfMTool(host));
 }

@@ -29,8 +29,8 @@ export class Dashboard {
 
   private constructor(private readonly extensionUri: vscode.Uri) {
     this.panel = vscode.window.createWebviewPanel(
-      'bestOfN.dashboard',
-      'Best of N',
+      'bestOfM.dashboard',
+      'Best of M',
       { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
       {
         enableScripts: true,
@@ -89,7 +89,7 @@ export class Dashboard {
    * rendered from `srcdoc` instead, which needs no resource grant at all.
    */
   private withPreviewUris(state: DashboardState): DashboardState {
-    const settings = vscode.workspace.getConfiguration('bestOfN');
+    const settings = vscode.workspace.getConfiguration('bestOfM');
     const mode = settings.get<'rendered' | 'source' | 'off'>('preview.mode', 'rendered');
     const height = settings.get<number>('preview.height', 320);
     const withSettings = { ...state, preview: { mode, height } };
@@ -156,10 +156,10 @@ export class Dashboard {
 <meta http-equiv="Content-Security-Policy" content="${csp};">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="${styleUri}" rel="stylesheet">
-<title>Best of N</title>
+<title>Best of M</title>
 </head>
 <body>
-<div id="root"><p class="empty">No run yet. Use <strong>Best of N: Run Prompt Across Models</strong>.</p></div>
+<div id="root"><p class="empty">No run yet. Use <strong>Best of M: Run Prompt Across Models</strong>.</p></div>
 <script src="${scriptUri}"></script>
 </body>
 </html>`;

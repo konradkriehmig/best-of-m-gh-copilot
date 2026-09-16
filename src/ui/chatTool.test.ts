@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as vscode from 'vscode';
-import { BestOfNTool, BestOfNToolInput } from './chatTool';
+import { BestOfMTool, BestOfMToolInput } from './chatTool';
 import { ChatRunHost } from './chatParticipant';
 import { RunPlan } from './picker';
 import { RankedVariant, RunRecord, VariantState } from '../util/types';
@@ -58,9 +58,9 @@ function host(over: Partial<ChatRunHost> = {}): ChatRunHost {
   };
 }
 
-async function invoke(tool: BestOfNTool, input: BestOfNToolInput) {
+async function invoke(tool: BestOfMTool, input: BestOfMToolInput) {
   return tool.invoke(
-    { input } as vscode.LanguageModelToolInvocationOptions<BestOfNToolInput>,
+    { input } as vscode.LanguageModelToolInvocationOptions<BestOfMToolInput>,
     noToken,
   );
 }
@@ -69,25 +69,25 @@ function resultText(result: vscode.LanguageModelToolResult): string {
   return (result.content as Array<{ value: string }>).map((p) => p.value).join('');
 }
 
-describe('BestOfNTool.invoke', () => {
+describe('BestOfMTool.invoke', () => {
   it('rejects an empty prompt with guidance for the model', async () => {
-    const tool = new BestOfNTool(host());
+    const tool = new BestOfMTool(host());
     await expect(invoke(tool, { prompt: '  ' })).rejects.toThrow(/"prompt" parameter is required/);
   });
 
   it('refuses to start a second concurrent run', async () => {
-    const tool = new BestOfNTool(host({ isRunning: () => true }));
+    const tool = new BestOfMTool(host({ isRunning: () => true }));
     await expect(invoke(tool, { prompt: 'x', models: ['m'] })).rejects.toThrow(/already in progress/);
   });
 
   it('reports a missing repository', async () => {
-    const tool = new BestOfNTool(host({ resolveRepoRoot: async () => undefined }));
+    const tool = new BestOfMTool(host({ resolveRepoRoot: async () => undefined }));
     await expect(invoke(tool, { prompt: 'x', models: ['m'] })).rejects.toThrow(/git repository/);
   });
 
   it('passes the model spec through, expanding replicas', async () => {
     let seen: RunPlan | undefined;
-    const tool = new BestOfNTool(
+    const tool = new BestOfMTool(
       host({
         execute: async (plan) => {
           seen = plan;
@@ -106,7 +106,7 @@ describe('BestOfNTool.invoke', () => {
   });
 
   it('fails clearly when no models are configured and the user cancels the picker', async () => {
-    const tool = new BestOfNTool(host());
+    const tool = new BestOfMTool(host());
     await expect(invoke(tool, { prompt: 'x' })).rejects.toThrow(/No models were selected/);
   });
 
@@ -120,7 +120,7 @@ describe('BestOfNTool.invoke', () => {
         reasons: [],
       },
     ];
-    const tool = new BestOfNTool(
+    const tool = new BestOfMTool(
       host({
         execute: async () => ({
           run: run(
@@ -146,7 +146,7 @@ describe('BestOfNTool.invoke', () => {
     const empty = variant({
       diff: { filesChanged: 0, insertions: 0, deletions: 0, files: [], empty: true },
     });
-    const tool = new BestOfNTool(
+    const tool = new BestOfMTool(
       host({ execute: async () => ({ run: run([empty]), ranking: [] }) }),
     );
 
@@ -155,17 +155,17 @@ describe('BestOfNTool.invoke', () => {
   });
 
   it('surfaces a run that never started', async () => {
-    const tool = new BestOfNTool(host({ execute: async () => undefined }));
+    const tool = new BestOfMTool(host({ execute: async () => undefined }));
     await expect(invoke(tool, { prompt: 'x', models: ['m'] })).rejects.toThrow(/did not start/);
   });
 });
 
-describe('BestOfNTool.prepareInvocation', () => {
+describe('BestOfMTool.prepareInvocation', () => {
   it('states the cost multiple in the confirmation', async () => {
-    const tool = new BestOfNTool(host());
+    const tool = new BestOfMTool(host());
     const prepared = await tool.prepareInvocation({
       input: { prompt: 'do the thing', models: ['a x2', 'b'] },
-    } as vscode.LanguageModelToolInvocationPrepareOptions<BestOfNToolInput>);
+    } as vscode.LanguageModelToolInvocationPrepareOptions<BestOfMToolInput>);
 
     expect(prepared.confirmationMessages?.title).toContain('3 parallel attempts');
     const message = prepared.confirmationMessages?.message as vscode.MarkdownString;

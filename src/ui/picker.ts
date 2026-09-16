@@ -15,7 +15,7 @@ interface ModelQuickPickItem extends vscode.QuickPickItem {
 
 async function pickPrompt(): Promise<string | undefined> {
   const prompt = await vscode.window.showInputBox({
-    title: 'Best of N (1/4): the prompt',
+    title: 'Best of M (1/4): the prompt',
     prompt: 'The task every variant will attempt independently',
     placeHolder: 'e.g. Add retry with exponential backoff to the HTTP client and cover it with tests',
     ignoreFocusOut: true,
@@ -34,7 +34,7 @@ async function pickModels(): Promise<ModelOption[] | undefined> {
   }));
 
   const picked = await vscode.window.showQuickPick(items, {
-    title: 'Best of N (2/4): models',
+    title: 'Best of M (2/4): models',
     placeHolder: 'Select the models to run. Pick one model to do best-of-N on a single model.',
     canPickMany: true,
     ignoreFocusOut: true,
@@ -53,7 +53,7 @@ async function pickCounts(
 
   for (const [index, model] of models.entries()) {
     const answer = await vscode.window.showInputBox({
-      title: `Best of N (3/4): sessions for ${model.id} (${index + 1}/${models.length})`,
+      title: `Best of M (3/4): sessions for ${model.id} (${index + 1}/${models.length})`,
       prompt: `How many parallel sessions should run on ${model.id}?`,
       value: models.length === 1 ? '3' : '1',
       ignoreFocusOut: true,
@@ -97,7 +97,7 @@ async function pickBaseRef(repoRoot: string): Promise<string | undefined> {
   }
 
   const picked = await vscode.window.showQuickPick(items, {
-    title: 'Best of N (4/4): base',
+    title: 'Best of M (4/4): base',
     placeHolder: 'Which ref should every variant start from?',
     ignoreFocusOut: true,
   });

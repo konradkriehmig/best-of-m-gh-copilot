@@ -4,7 +4,7 @@ let channel: vscode.LogOutputChannel | undefined;
 
 export function initLog(): vscode.LogOutputChannel {
   if (!channel) {
-    channel = vscode.window.createOutputChannel('Best of N', { log: true });
+    channel = vscode.window.createOutputChannel('Best of M', { log: true });
   }
   return channel;
 }

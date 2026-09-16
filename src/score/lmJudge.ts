@@ -39,7 +39,7 @@ export async function runLmJudge(
     const prompt = buildJudgePrompt(options.prompt, judgeable, options.diffs, options.maxDiffBytes);
     const response = await model.sendRequest(
       [vscode.LanguageModelChatMessage.User(prompt)],
-      { justification: 'Best of N compares the results of several parallel attempts.' },
+      { justification: 'Best of M compares the results of several parallel attempts.' },
       options.token,
     );
 

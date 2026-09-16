@@ -1,5 +1,5 @@
 /**
- * End-to-end smoke test for the Best of N pipeline.
+ * End-to-end smoke test for the Best of M pipeline.
  *
  * Drives the real compiled modules against a throwaway git repository with real agent
  * sessions, to verify what unit tests cannot: CLI resolution, stdin prompt delivery,

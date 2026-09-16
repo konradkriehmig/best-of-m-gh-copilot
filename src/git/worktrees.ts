@@ -100,7 +100,7 @@ export async function copyIgnoredFiles(
 }
 
 export function defaultWorktreeRoot(repoRoot: string): string {
-  return path.join(path.dirname(repoRoot), '.best-of-n', path.basename(repoRoot));
+  return path.join(path.dirname(repoRoot), '.best-of-m', path.basename(repoRoot));
 }
 
 /** Find worktrees created by this extension that are no longer tracked by an active run. */

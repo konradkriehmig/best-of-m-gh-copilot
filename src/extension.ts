@@ -13,7 +13,7 @@ import { cleanupRun, confirmWinner, mergeWinner } from './merge/winner';
 import { errorMessage, initLog, log } from './util/log';
 import { RankedVariant, RunRecord } from './util/types';
 
-const ACTIVE_RUN_KEY = 'bestOfN.activeWorktrees';
+const ACTIVE_RUN_KEY = 'bestOfM.activeWorktrees';
 
 let controller: RunController | undefined;
 let diffProvider: DiffContentProvider | undefined;
@@ -21,7 +21,7 @@ let diffProvider: DiffContentProvider | undefined;
 async function resolveRepoRoot(): Promise<string | undefined> {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
-    void vscode.window.showErrorMessage('Best of N needs an open folder that is inside a git repository.');
+    void vscode.window.showErrorMessage('Best of M needs an open folder that is inside a git repository.');
     return undefined;
   }
 
@@ -31,7 +31,7 @@ async function resolveRepoRoot(): Promise<string | undefined> {
   } else {
     const picked = await vscode.window.showQuickPick(
       folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath })),
-      { title: 'Best of N: which repository?', ignoreFocusOut: true },
+      { title: 'Best of M: which repository?', ignoreFocusOut: true },
     );
     candidate = picked?.description;
   }
@@ -48,7 +48,7 @@ async function resolveRepoRoot(): Promise<string | undefined> {
 }
 
 async function ensureCli(): Promise<CliInvocation | undefined> {
-  const configured = vscode.workspace.getConfiguration('bestOfN').get<string>('cliPath', '');
+  const configured = vscode.workspace.getConfiguration('bestOfM').get<string>('cliPath', '');
   try {
     const invocation = resolveCli(configured);
     const version = await cliVersion(invocation);
@@ -61,7 +61,7 @@ async function ensureCli(): Promise<CliInvocation | undefined> {
         : `The Copilot CLI could not be started: ${errorMessage(err)}`;
     const choice = await vscode.window.showErrorMessage(message, 'Open settings');
     if (choice === 'Open settings') {
-      await vscode.commands.executeCommand('workbench.action.openSettings', 'bestOfN.cliPath');
+      await vscode.commands.executeCommand('workbench.action.openSettings', 'bestOfM.cliPath');
     }
     return undefined;
   }
@@ -85,10 +85,10 @@ async function handleWinner(context: vscode.ExtensionContext, variantId: string)
   }
 
   controller.setWinner(variantId);
-  const deleteLosers = !vscode.workspace.getConfiguration('bestOfN').get<boolean>('keepLoserBranches', true);
+  const deleteLosers = !vscode.workspace.getConfiguration('bestOfM').get<boolean>('keepLoserBranches', true);
 
   await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'Best of N' },
+    { location: vscode.ProgressLocation.Notification, title: 'Best of M' },
     async (progress) => {
       let message = `Kept ${variant.label} on branch ${variant.branch}.`;
       if (decision === 'merge') {
@@ -147,7 +147,7 @@ function wireDashboard(context: vscode.ExtensionContext, dashboard: Dashboard): 
             break;
         }
       } catch (err) {
-        void vscode.window.showErrorMessage(`Best of N: ${errorMessage(err)}`);
+        void vscode.window.showErrorMessage(`Best of M: ${errorMessage(err)}`);
       }
     })();
   });
@@ -156,7 +156,7 @@ function wireDashboard(context: vscode.ExtensionContext, dashboard: Dashboard): 
 
 async function runCommand(context: vscode.ExtensionContext): Promise<void> {
   if (controller?.isRunning) {
-    void vscode.window.showWarningMessage('A Best of N run is already in progress.');
+    void vscode.window.showWarningMessage('A Best of M run is already in progress.');
     return;
   }
 
@@ -177,7 +177,7 @@ async function runCommand(context: vscode.ExtensionContext): Promise<void> {
 
   const failures = result.run.variants.filter((v) => v.status === 'failed').length;
   void vscode.window.showInformationMessage(
-    `Best of N finished: ${result.run.variants.length - failures}/${result.run.variants.length} variants succeeded.` +
+    `Best of M finished: ${result.run.variants.length - failures}/${result.run.variants.length} variants succeeded.` +
       (failures > 0 ? ' Check the dashboard for errors.' : ''),
   );
 }
@@ -194,7 +194,7 @@ async function startRun(
   externalToken?: vscode.CancellationToken,
 ): Promise<{ run: RunRecord; ranking: RankedVariant[] } | undefined> {
   // The default engine runs Copilot models inside VS Code; the CLI is opt-in.
-  const engine = vscode.workspace.getConfiguration('bestOfN').get<string>('engine', 'lm');
+  const engine = vscode.workspace.getConfiguration('bestOfM').get<string>('engine', 'lm');
   let invocation: CliInvocation | undefined;
   if (engine === 'cli') {
     invocation = await ensureCli();
@@ -203,7 +203,7 @@ async function startRun(
     }
   }
 
-  const dashboard = vscode.workspace.getConfiguration('bestOfN').get<boolean>('autoOpenDashboard', true)
+  const dashboard = vscode.workspace.getConfiguration('bestOfM').get<boolean>('autoOpenDashboard', true)
     ? Dashboard.show(context.extensionUri)
     : Dashboard.instance;
   if (dashboard) {
@@ -249,7 +249,7 @@ async function startRun(
     const run = controller.current;
     return run ? { run, ranking: controller.currentRanking } : undefined;
   } catch (err) {
-    void vscode.window.showErrorMessage(`Best of N failed: ${errorMessage(err)}`);
+    void vscode.window.showErrorMessage(`Best of M failed: ${errorMessage(err)}`);
     log().error(errorMessage(err));
     return undefined;
   } finally {
@@ -272,7 +272,7 @@ async function cleanupOrphansCommand(context: vscode.ExtensionContext): Promise<
 
   const orphans = await findOrphans(root, active);
   if (orphans.length === 0) {
-    void vscode.window.showInformationMessage('No leftover Best of N worktrees were found.');
+    void vscode.window.showInformationMessage('No leftover Best of M worktrees were found.');
     return;
   }
 
@@ -283,7 +283,7 @@ async function cleanupOrphansCommand(context: vscode.ExtensionContext): Promise<
       picked: true,
     })),
     {
-      title: 'Best of N: remove leftover worktrees',
+      title: 'Best of M: remove leftover worktrees',
       canPickMany: true,
       placeHolder: 'Branches are kept; only the worktree directories are removed.',
     },
@@ -302,32 +302,32 @@ async function cleanupOrphansCommand(context: vscode.ExtensionContext): Promise<
 
 export function activate(context: vscode.ExtensionContext): void {
   initLog();
-  log().info('Best of N activated');
+  log().info('Best of M activated');
 
   diffProvider = new DiffContentProvider();
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(BASE_SCHEME, diffProvider),
     vscode.workspace.registerTextDocumentContentProvider(PATCH_SCHEME, diffProvider),
-    vscode.commands.registerCommand('bestOfN.run', () => runCommand(context)),
-    vscode.commands.registerCommand('bestOfN.showDashboard', () => {
+    vscode.commands.registerCommand('bestOfM.run', () => runCommand(context)),
+    vscode.commands.registerCommand('bestOfM.showDashboard', () => {
       const dashboard = Dashboard.show(context.extensionUri);
       wireDashboard(context, dashboard);
       if (controller?.current) {
         dashboard.update({ run: controller.current, ranking: controller.currentRanking });
       }
     }),
-    vscode.commands.registerCommand('bestOfN.cancelRun', () => {
+    vscode.commands.registerCommand('bestOfM.cancelRun', () => {
       if (!controller?.isRunning) {
-        void vscode.window.showInformationMessage('No Best of N run is in progress.');
+        void vscode.window.showInformationMessage('No Best of M run is in progress.');
         return;
       }
       controller.cancel();
     }),
-    vscode.commands.registerCommand('bestOfN.cleanupOrphans', () => cleanupOrphansCommand(context)),
-    vscode.commands.registerCommand('bestOfN.keepVariant', (variantId: string) =>
+    vscode.commands.registerCommand('bestOfM.cleanupOrphans', () => cleanupOrphansCommand(context)),
+    vscode.commands.registerCommand('bestOfM.keepVariant', (variantId: string) =>
       handleWinner(context, variantId),
     ),
-    vscode.commands.registerCommand('bestOfN.showVariantDiff', async (variantId: string) => {
+    vscode.commands.registerCommand('bestOfM.showVariantDiff', async (variantId: string) => {
       const run = controller?.current;
       const variant = controller?.variant(variantId);
       if (run && variant && diffProvider) {
@@ -343,21 +343,21 @@ export function activate(context: vscode.ExtensionContext): void {
       startRun(context, plan, repoRoot, onProgress, token),
   };
 
-  // Two chat entry points: the `#bestofn` tool for agent mode, which is where VS Code
-  // now routes extension capabilities, and the `@bestofn` participant for ask mode.
+  // Two chat entry points: the `#bestofm` tool for agent mode, which is where VS Code
+  // now routes extension capabilities, and the `@bestofm` participant for ask mode.
   context.subscriptions.push(registerChatTool(chatHost));
 
   try {
     context.subscriptions.push(registerChatParticipant(context, chatHost));
   } catch (err) {
-    log().warn(`Chat participant unavailable, use #bestofn instead: ${errorMessage(err)}`);
+    log().warn(`Chat participant unavailable, use #bestofm instead: ${errorMessage(err)}`);
   }
 
   // Chat surfaces move between VS Code versions, so keep one entry point that is always
   // visible and cannot be hidden behind a picker.
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  status.command = 'bestOfN.run';
-  status.text = '$(run-all) Best of N';
+  status.command = 'bestOfM.run';
+  status.text = '$(run-all) Best of M';
   status.tooltip = 'Run one prompt across several Copilot models in parallel';
   status.show();
   context.subscriptions.push(status);

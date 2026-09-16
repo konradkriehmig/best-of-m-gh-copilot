@@ -24,7 +24,7 @@ export interface RunCallbacks {
 }
 
 function config() {
-  return vscode.workspace.getConfiguration('bestOfN');
+  return vscode.workspace.getConfiguration('bestOfM');
 }
 
 export class RunController {
@@ -244,7 +244,7 @@ export class RunController {
         continue;
       }
       try {
-        await commitVariantWork(variant.worktreePath, `Best of N: ${variant.label}`);
+        await commitVariantWork(variant.worktreePath, `Best of M: ${variant.label}`);
         variant.diff = await diffStat(this.run.repoRoot, this.run.baseRef, variant.branch);
         this.diffs.set(variant.id, await diffText(this.run.repoRoot, this.run.baseRef, variant.branch));
         variant.preview = await buildPreview(variant.worktreePath, variant.diff.files, this.run.repoRoot);

@@ -18,6 +18,11 @@ export function variantLabel(model: string, replica: number, totalReplicas: numb
   return totalReplicas > 1 ? `${model} #${replica}` : model;
 }
 
+/**
+ * The `bon/` prefix predates the rename to Best of M and deliberately survives it: orphan
+ * cleanup finds our worktrees by this prefix, so changing it would strand every branch and
+ * worktree created before the rename.
+ */
 export function branchName(runId: string, model: string, replica: number): string {
   return `bon/${runId}/${slugify(model)}-${replica}`;
 }

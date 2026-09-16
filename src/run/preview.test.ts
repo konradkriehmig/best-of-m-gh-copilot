@@ -118,7 +118,7 @@ describe('inlineAssets', () => {
   });
 
   // A worktree is not where the repo is, so a correct reference such as
-  // `../shared/common.css` resolves to nothing under `.best-of-n`. The reference is not
+  // `../shared/common.css` resolves to nothing under `.best-of-m`. The reference is not
   // wrong, its base is -- which is what made two variants render unstyled.
   it('resolves an asset that sits outside the repo, relative to the repo', async () => {
     const assets = path.join(root, 'assets');

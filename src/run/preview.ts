@@ -105,7 +105,7 @@ export interface InlineResult {
  *
  * The repository fallback exists because a worktree is not where the repository is. A page
  * that correctly links `../shared/common.css` resolves that against the repo when opened
- * normally, but against the worktree's parent — some directory under `.best-of-n` — when
+ * normally, but against the worktree's parent — some directory under `.best-of-m` — when
  * previewed. The reference is not wrong; its base is. So the page's position inside the
  * worktree is mirrored onto the repo and the same reference is resolved from there, which
  * reproduces what the file would load if it were opened in place.

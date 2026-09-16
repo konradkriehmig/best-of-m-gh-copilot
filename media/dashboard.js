@@ -232,7 +232,7 @@
         'div',
         'activity',
         limit > 0
-          ? '> waiting for a slot (' + limit + ' run at a time, bestOfN.maxConcurrent)'
+          ? '> waiting for a slot (' + limit + ' run at a time, bestOfM.maxConcurrent)'
           : '> waiting for a slot',
       ));
     }
@@ -259,13 +259,6 @@
       node.appendChild(el('div', 'reasons', ranked.reasons.join(' | ')));
     }
 
-    if (state.run && state.run.judge && state.run.judge.ranking) {
-      const verdict = state.run.judge.ranking.filter(function (r) { return r.variantId === variant.id; })[0];
-      if (verdict && verdict.reasoning) {
-        node.appendChild(el('div', 'judge', 'Judge ' + verdict.score + '/10: ' + verdict.reasoning));
-      }
-    }
-
     const files = filesFor(variant);
     if (files) {
       node.appendChild(files);
@@ -290,21 +283,40 @@
     }, true, !finished || !hasDiff || busy));
 
     node.appendChild(actions);
+
+    // The judge is commentary on a result you have already seen, so it reads last, under
+    // the preview and the buttons, rather than pushing them down the card.
+    const verdict = judgeVerdictFor(variant, state);
+    if (verdict) {
+      node.appendChild(verdict);
+    }
+
     return node;
+  }
+
+  function judgeVerdictFor(variant, state) {
+    if (!state.run || !state.run.judge || !state.run.judge.ranking) {
+      return undefined;
+    }
+    const verdict = state.run.judge.ranking.filter(function (r) { return r.variantId === variant.id; })[0];
+    if (!verdict || !verdict.reasoning) {
+      return undefined;
+    }
+    return el('div', 'judge', 'Judge ' + verdict.score + '/10: ' + verdict.reasoning);
   }
 
   function render(state) {
     root.textContent = '';
 
     if (!state.run) {
-      root.appendChild(el('p', 'empty', 'No run yet. Use "Best of N: Run Prompt Across Models".'));
+      root.appendChild(el('p', 'empty', 'No run yet. Use "Best of M: Run Prompt Across Models".'));
       return;
     }
 
     const run = state.run;
     const header = el('div', 'header');
     const left = el('div');
-    left.appendChild(el('h1', undefined, 'Best of N - ' + run.variants.length + ' variants'));
+    left.appendChild(el('h1', undefined, 'Best of M - ' + run.variants.length + ' variants'));
     left.appendChild(el('p', 'prompt', run.prompt));
 
     var meta = 'base ' + run.baseRef + '  |  run ' + run.runId + '  |  ' + run.status;
@@ -312,7 +324,7 @@
     if (limit < run.variants.length) {
       meta += '  |  ' + limit + ' at a time';
     }
-    // There is no confirmation dialog any more, so the cost of racing N agents is stated
+    // There is no confirmation dialog any more, so the cost of racing M agents is stated
     // here instead, where it stays visible for the whole run.
     meta += '  |  ~' + run.variants.length + 'x the credits of one session';
     left.appendChild(el('div', 'meta', meta));

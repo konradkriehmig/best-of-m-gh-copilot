@@ -108,7 +108,7 @@ export function resolveCli(configuredPath: string | undefined): CliInvocation {
     throw new CliNotFoundError(
       configuredPath && configuredPath.trim().length > 0
         ? `The configured Copilot CLI path does not exist: ${configuredPath}`
-        : 'Could not find the Copilot CLI. Install it with "npm install -g @github/copilot", or set "bestOfN.cliPath".',
+        : 'Could not find the Copilot CLI. Install it with "npm install -g @github/copilot", or set "bestOfM.cliPath".',
     );
   }
 

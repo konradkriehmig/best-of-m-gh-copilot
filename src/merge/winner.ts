@@ -39,7 +39,7 @@ export async function mergeWinner(
   }
 
   try {
-    await git(run.repoRoot, ['merge', '--no-ff', '-m', `Best of N: ${winner.label}`, winner.branch]);
+    await git(run.repoRoot, ['merge', '--no-ff', '-m', `Best of M: ${winner.label}`, winner.branch]);
     return { merged: true, message: `Merged ${winner.label} into ${run.baseBranch}.` };
   } catch (err) {
     await tryGit(run.repoRoot, ['merge', '--abort']);

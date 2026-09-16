@@ -108,7 +108,7 @@ export async function runLmAgent(
       {
         tools,
         toolMode: vscode.LanguageModelChatToolMode.Auto,
-        justification: 'Best of N runs this prompt across several models to compare the results.',
+        justification: 'Best of M runs this prompt across several models to compare the results.',
       },
       options.token,
     );

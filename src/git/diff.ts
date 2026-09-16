@@ -18,9 +18,9 @@ export async function commitVariantWork(
   }
   await git(worktreePath, [
     '-c',
-    'user.name=Best of N',
+    'user.name=Best of M',
     '-c',
-    'user.email=best-of-n@localhost',
+    'user.email=best-of-m@localhost',
     'commit',
     '--quiet',
     '--no-verify',

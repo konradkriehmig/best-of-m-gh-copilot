@@ -1,8 +1,8 @@
 {
-  "name": "best-of-n",
-  "displayName": "Best of N",
+  "name": "best-of-m",
+  "displayName": "Best of M",
   "description": "Fire one prompt at several GitHub Copilot models at once, each in its own git worktree, then compare the results and keep the best.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "publisher": "konradkriehmig",
   "license": "MIT",
   "private": true,
@@ -20,6 +20,7 @@
     "agent",
     "worktree",
     "parallel",
+    "best-of-m",
     "best-of-n"
   ],
   "activationEvents": [
@@ -29,43 +30,43 @@
   "contributes": {
     "commands": [
       {
-        "command": "bestOfN.run",
+        "command": "bestOfM.run",
         "title": "Run Prompt Across Models",
-        "category": "Best of N"
+        "category": "Best of M"
       },
       {
-        "command": "bestOfN.showDashboard",
+        "command": "bestOfM.showDashboard",
         "title": "Show Dashboard",
-        "category": "Best of N"
+        "category": "Best of M"
       },
       {
-        "command": "bestOfN.cancelRun",
+        "command": "bestOfM.cancelRun",
         "title": "Cancel Active Run",
-        "category": "Best of N"
+        "category": "Best of M"
       },
       {
-        "command": "bestOfN.cleanupOrphans",
+        "command": "bestOfM.cleanupOrphans",
         "title": "Clean Up Orphaned Worktrees",
-        "category": "Best of N"
+        "category": "Best of M"
       },
       {
-        "command": "bestOfN.keepVariant",
+        "command": "bestOfM.keepVariant",
         "title": "Keep Variant",
-        "category": "Best of N",
+        "category": "Best of M",
         "enablement": "false"
       },
       {
-        "command": "bestOfN.showVariantDiff",
+        "command": "bestOfM.showVariantDiff",
         "title": "Show Variant Diff",
-        "category": "Best of N",
+        "category": "Best of M",
         "enablement": "false"
       }
     ],
     "chatParticipants": [
       {
-        "id": "bestOfN.chat",
-        "name": "bestofn",
-        "fullName": "Best of N",
+        "id": "bestOfM.chat",
+        "name": "bestofm",
+        "fullName": "Best of M",
         "description": "Run this prompt across several models at once and compare the results",
         "isSticky": true,
         "commands": [
@@ -78,13 +79,13 @@
     ],
     "languageModelTools": [
       {
-        "name": "run_best_of_n",
-        "displayName": "Best of N",
-        "toolReferenceName": "bestofn",
+        "name": "run_best_of_m",
+        "displayName": "Best of M",
+        "toolReferenceName": "bestofm",
         "canBeReferencedInPrompt": true,
         "icon": "$(run-all)",
         "userDescription": "Run this task across several models in parallel, each in its own git worktree, then compare the results.",
-        "modelDescription": "Runs one coding task N times in parallel, once per selected GitHub Copilot model, each in its own isolated git worktree, then verifies, ranks and compares the results. Use this when the user asks to try a task across several models, to run something in parallel, to fan out, to get a best-of-N result, or to compare how different models solve the same problem. Do NOT use it for ordinary single-attempt edits. This tool performs the whole task itself and takes minutes to return; after it returns, report its result table to the user and do not redo the work yourself. It never modifies the user's working tree: each attempt lands on its own branch.",
+        "modelDescription": "Runs one coding task several times in parallel, once per selected GitHub Copilot model, each in its own isolated git worktree, then verifies, ranks and compares the results. Use this when the user asks to try a task across several models, to run something in parallel, to fan out, to get a best-of-N or best-of-M result, or to compare how different models solve the same problem. Do NOT use it for ordinary single-attempt edits. This tool performs the whole task itself and takes minutes to return; after it returns, report its result table to the user and do not redo the work yourself. It never modifies the user's working tree: each attempt lands on its own branch.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -107,9 +108,9 @@
       }
     ],
     "configuration": {
-      "title": "Best of N",
+      "title": "Best of M",
       "properties": {
-        "bestOfN.engine": {
+        "bestOfM.engine": {
           "type": "string",
           "enum": [
             "lm",
@@ -122,20 +123,20 @@
           "default": "lm",
           "description": "How each variant is executed."
         },
-        "bestOfN.chat.fanOut": {
+        "bestOfM.chat.fanOut": {
           "type": "array",
           "items": {
             "type": "string"
           },
           "default": [],
-          "markdownDescription": "Models that an `@bestofn` chat prompt fans out to. Use `model x3` to run the same model several times. Set it interactively with `@bestofn /models`."
+          "markdownDescription": "Models that an `@bestofm` chat prompt fans out to. Use `model x3` to run the same model several times. Set it interactively with `@bestofm /models`."
         },
-        "bestOfN.cliPath": {
+        "bestOfM.cliPath": {
           "type": "string",
           "default": "",
           "markdownDescription": "Absolute path to the `copilot` executable. Leave empty to auto-detect from `PATH` and the global npm prefix."
         },
-        "bestOfN.models": {
+        "bestOfM.models": {
           "type": "array",
           "items": {
             "type": "string"
@@ -143,44 +144,44 @@
           "default": [],
           "markdownDescription": "Extra model ids to offer in the picker, merged with models discovered from the VS Code language model API. Example: `claude-opus-5`, `gpt-5.6-sol`."
         },
-        "bestOfN.maxConcurrent": {
+        "bestOfM.maxConcurrent": {
           "type": "number",
           "default": 0,
           "minimum": 0,
           "maximum": 16,
           "markdownDescription": "Maximum number of agent sessions running at the same time. `0` runs every variant at once, which is the default; a positive number queues the rest. Raise it above 0 only if Copilot rate limits you."
         },
-        "bestOfN.worktreeRoot": {
+        "bestOfM.worktreeRoot": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Directory to create worktrees in. Leave empty to use `<repo>/../.best-of-n`."
+          "markdownDescription": "Directory to create worktrees in. Leave empty to use `<repo>/../.best-of-m`."
         },
-        "bestOfN.verifyCommand": {
+        "bestOfM.verifyCommand": {
           "type": "string",
           "default": "",
           "markdownDescription": "Shell command run inside each worktree after its agent finishes, for example `npm test`. Its exit code scores the variant. Leave empty to skip verification."
         },
-        "bestOfN.verifyTimeoutMs": {
+        "bestOfM.verifyTimeoutMs": {
           "type": "number",
           "default": 600000,
           "description": "Timeout in milliseconds for the verify command."
         },
-        "bestOfN.judge.enabled": {
+        "bestOfM.judge.enabled": {
           "type": "boolean",
           "default": true,
           "description": "After all variants finish, make one extra Copilot call that reviews every diff and ranks them."
         },
-        "bestOfN.judge.model": {
+        "bestOfM.judge.model": {
           "type": "string",
           "default": "",
           "description": "Model used for the judge call. Leave empty to use the CLI default model."
         },
-        "bestOfN.judge.maxDiffBytes": {
+        "bestOfM.judge.maxDiffBytes": {
           "type": "number",
           "default": 60000,
           "description": "Maximum size of each variant diff handed to the judge. Larger diffs are truncated."
         },
-        "bestOfN.denyTools": {
+        "bestOfM.denyTools": {
           "type": "array",
           "items": {
             "type": "string"
@@ -190,17 +191,17 @@
           ],
           "markdownDescription": "Tool patterns passed to `--deny-tool`. Agents run with `--allow-all-tools`, so this deny list is the main safety control."
         },
-        "bestOfN.disableBuiltinMcps": {
+        "bestOfM.disableBuiltinMcps": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Pass `--disable-builtin-mcps`. MCP servers start once per session, so N variants pay the cost N times."
+          "markdownDescription": "Pass `--disable-builtin-mcps`. MCP servers start once per session, so M variants pay the cost M times."
         },
-        "bestOfN.maxAiCredits": {
+        "bestOfM.maxAiCredits": {
           "type": "number",
           "default": 0,
           "markdownDescription": "Per-variant AI credit cap passed to `--max-ai-credits`. Set to 0 to leave it unset. The CLI rejects values below 30."
         },
-        "bestOfN.copyIgnoredFiles": {
+        "bestOfM.copyIgnoredFiles": {
           "type": "array",
           "items": {
             "type": "string"
@@ -211,17 +212,17 @@
           ],
           "description": "Git-ignored files copied from the main repository into each new worktree, so agents can build and test."
         },
-        "bestOfN.keepLoserBranches": {
+        "bestOfM.keepLoserBranches": {
           "type": "boolean",
           "default": true,
           "description": "Keep the branches of variants that were not chosen. Worktrees are always removed after a winner is merged."
         },
-        "bestOfN.autoOpenDashboard": {
+        "bestOfM.autoOpenDashboard": {
           "type": "boolean",
           "default": true,
           "description": "Open the dashboard automatically when a run starts."
         },
-        "bestOfN.preview.mode": {
+        "bestOfM.preview.mode": {
           "type": "string",
           "enum": [
             "rendered",
@@ -236,7 +237,7 @@
           "default": "rendered",
           "description": "What to show under each variant card. Rendered previews run generated HTML in a sandboxed frame that cannot reach your editor or the network origin, but it is still model-written code."
         },
-        "bestOfN.preview.height": {
+        "bestOfM.preview.height": {
           "type": "number",
           "default": 320,
           "minimum": 120,
@@ -247,9 +248,9 @@
     },
     "keybindings": [
       {
-        "command": "bestOfN.run",
-        "key": "ctrl+alt+n",
-        "mac": "cmd+alt+n",
+        "command": "bestOfM.run",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m",
         "when": "!inputFocus || editorTextFocus"
       }
     ]
