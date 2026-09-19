@@ -1,4 +1,5 @@
-<img width="128" height="128" alt="icon" src="https://github.com/user-attachments/assets/8de0f94d-505b-4cee-962c-10b60d0020db" />
+# Fan out for GitHub Copilot
+<img width="128" height="128" alt="icon" src="https://github.com/user-attachments/assets/8de0f94d-505b-4cee-962c-10b60d0020db" href="https://marketplace.visualstudio.com/items?itemName=konradkriehmig.best-of-m-gh-copilot"/>
 
 ### Run different models simultaneously...
 <img alt="ran 10 different models" src="https://github.com/user-attachments/assets/f741c7d3-ad6f-4637-b381-c1695a02ec7c"/>
